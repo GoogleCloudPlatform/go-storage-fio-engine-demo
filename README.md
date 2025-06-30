@@ -1,10 +1,16 @@
 # `fio` ioengine for package `cloud.google.com/go/storage`
 
-This is an external `fio` ioengine which uses the Go SDK. Only read-only tests
-using MultiRangeDownloader are currently supported.
+This is an external `fio` ioengine which uses the Go SDK. The supported tests
+are:
+
+-   Read-only tests using MultiRangeDownloader
+-   Write-only tests using an appendable writer which finalizes on close
 
 The engine makes no effort to prefetch data or read ahead. As a result, the
 randread and read results are extremely similar.
+
+Writes are sequential. As a result, iodepth does not have an effect on
+performance.
 
 ## Quickstart
 

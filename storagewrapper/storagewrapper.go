@@ -18,6 +18,7 @@ import "C"
 import (
 	"bytes"
 	"context"
+	"io"
 	"log/slog"
 	"runtime/cgo"
 	"strings"
@@ -26,14 +27,16 @@ import (
 	"cloud.google.com/go/storage"
 )
 
+const (
+	// Must stay in sync with FIO_Q_COMPLETED
+	fioQCompleted = 0
+	// Must stay in sync with FIO_Q_QUEUED
+	fioQQueued = 1
+)
+
 func init() {
 	// TODO: Consider doing this in the engine, via options.
 	slog.SetLogLoggerLevel(100)
-}
-
-type mrdReadResult struct {
-	iou unsafe.Pointer
-	err error
 }
 
 func shouldRetry(err error) bool {
@@ -42,50 +45,69 @@ func shouldRetry(err error) bool {
 	return result
 }
 
+type iouCompletion struct {
+	iou unsafe.Pointer
+	err error
+}
+
 type threadData struct {
-	completions       chan mrdReadResult
-	reapedCompletions []mrdReadResult
+	completions       chan iouCompletion
+	reapedCompletions []iouCompletion
 	client            *storage.Client
 }
 
-func handle[T any](v uintptr) (*T, cgo.Handle, bool) {
-	if v == 0 {
-		return nil, 0, false
-	}
+type mrdFile struct {
+	completions chan<- iouCompletion
+	mrd         *storage.MultiRangeDownloader
+}
+
+type writerFile struct {
+	w *storage.Writer
+}
+
+type goFile interface {
+	io.Closer
+	// Enqueues an operation appropriate for this file type. Implementations must
+	// return 0 for successfully completed operations, 1 for enqueued operations,
+	// and -1 for failed operations.
+	enqueue(p []byte, offset int64, tag unsafe.Pointer) int
+}
+
+func handle[T any](v uintptr) (T, cgo.Handle, bool) {
 	h := cgo.Handle(v)
-	t, ok := h.Value().(*T)
+	t, ok := h.Value().(T)
 	if !ok {
-		return nil, 0, false
+		return t, 0, false
 	}
 	return t, h, true
 }
 
-//export MrdInit
-func MrdInit(iodepth uint) uintptr {
-	slog.Info("mrd init", "iodepth", iodepth)
+//export GoStorageInit
+func GoStorageInit(iodepth uint) uintptr {
+	slog.Info("go storage init", "iodepth", iodepth)
 	// Client metrics are super verbose on startup, so turn them off.
 	c, err := storage.NewGRPCClient(context.Background(), storage.WithDisabledClientMetrics())
-	c.SetRetry(storage.WithErrorFunc(shouldRetry))
 	if err != nil {
 		slog.Error("failed client creation", "error", err)
 		return 0
 	}
+	c.SetRetry(storage.WithErrorFunc(shouldRetry))
 
 	td := &threadData{
-		completions:       make(chan mrdReadResult, iodepth),
-		reapedCompletions: make([]mrdReadResult, 0, iodepth),
+		completions:       make(chan iouCompletion, iodepth),
+		reapedCompletions: make([]iouCompletion, 0, iodepth),
 		client:            c,
 	}
 	return uintptr(cgo.NewHandle(td))
 }
 
-//export MrdCleanup
-func MrdCleanup(td uintptr) {
-	slog.Info("mrd teardown", "td", td)
+//export GoStorageCleanup
+func GoStorageCleanup(td uintptr) {
+	slog.Info("go storage teardown", "td", td)
 	if td == 0 {
 		return
 	}
-	_, h, ok := handle[threadData](td)
+	_, h, ok := handle[*threadData](td)
 	if !ok {
 		slog.Error("cleanup: wrong type handle", "td", td)
 		return
@@ -93,12 +115,12 @@ func MrdCleanup(td uintptr) {
 	h.Delete()
 }
 
-//export MrdAwaitCompletions
-func MrdAwaitCompletions(td uintptr, cmin C.uint, cmax C.uint) int {
+//export GoStorageAwaitCompletions
+func GoStorageAwaitCompletions(td uintptr, cmin C.uint, cmax C.uint) int {
 	min := int(cmin)
 	max := int(cmax)
 	slog.Debug("mrd await completions", "td", td, "min", min, "max", max)
-	t, _, ok := handle[threadData](td)
+	t, _, ok := handle[*threadData](td)
 	if !ok {
 		slog.Error("await completions: wrong type handle", "td", td)
 		return -1
@@ -125,38 +147,39 @@ func MrdAwaitCompletions(td uintptr, cmin C.uint, cmax C.uint) int {
 	return len(t.reapedCompletions)
 }
 
-//export MrdGetEvent
-func MrdGetEvent(td uintptr) (iou unsafe.Pointer, result int) {
+//export GoStorageGetEvent
+func GoStorageGetEvent(td uintptr) (iou unsafe.Pointer, ok bool) {
 	slog.Debug("mrd get event", "td", td)
-	t, _, ok := handle[threadData](td)
+	t, _, ok := handle[*threadData](td)
 	if !ok {
 		slog.Error("get event: wrong type handle", "td", td)
-		return nil, -1
+		return nil, false
 	}
 	if len(t.reapedCompletions) == 0 {
 		slog.Error("get event: no reaped completions", "td", td)
-		return nil, -1
+		return nil, false
 	}
 	v := t.reapedCompletions[len(t.reapedCompletions)-1]
 	t.reapedCompletions = t.reapedCompletions[:len(t.reapedCompletions)-1]
-	code := 0
+	ok = true
 	if v.err != nil {
 		slog.Error("get event: reaped completion error", "error", v.err)
-		code = -1
+		ok = false
 	}
-	return v.iou, code
+	return v.iou, ok
 }
 
-//export MrdOpen
-func MrdOpen(td uintptr, file_name_cstr *C.char) uintptr {
+//export GoStorageOpenReadonly
+func GoStorageOpenReadonly(td uintptr, file_name_cstr *C.char) uintptr {
 	file_name := C.GoString(file_name_cstr)
+	slog.Debug("go storage open readonly", "td", td, "file_name", file_name)
 	bucket, object, ok := strings.Cut(file_name, "/")
-	slog.Debug("mrd open", "td", td, "file_name", file_name)
 	if !ok {
 		slog.Error("could not extract bucket from filename", "file_name", file_name)
 		return 0
 	}
-	t, _, ok := handle[threadData](td)
+
+	t, _, ok := handle[*threadData](td)
 	if !ok {
 		slog.Error("open: wrong type handle", "td", td)
 		return 0
@@ -166,46 +189,82 @@ func MrdOpen(td uintptr, file_name_cstr *C.char) uintptr {
 	mrd, err := oh.NewMultiRangeDownloader(context.Background())
 	if err != nil {
 		slog.Error("failed MRD open", "bucket", bucket, "object", object, "error", err)
-		// fail the open. return nil
 		return 0
 	}
-	return uintptr(cgo.NewHandle(mrd))
+	return uintptr(cgo.NewHandle(&mrdFile{t.completions, mrd}))
 }
 
-//export MrdClose
-func MrdClose(v uintptr) int {
-	slog.Debug("mrd close", "handle", v)
-	mrd, h, ok := handle[storage.MultiRangeDownloader](v)
+//export GoStorageOpenWriteonly
+func GoStorageOpenWriteonly(td uintptr, file_name_cstr *C.char) uintptr {
+	file_name := C.GoString(file_name_cstr)
+	slog.Debug("go storage open writeonly", "td", td, "file_name", file_name)
+	bucket, object, ok := strings.Cut(file_name, "/")
 	if !ok {
-		return -1
+		slog.Error("could not extract bucket from filename", "file_name", file_name)
+		return 0
+	}
+
+	t, _, ok := handle[*threadData](td)
+	if !ok {
+		slog.Error("open: wrong type handle", "td", td)
+		return 0
+	}
+
+	oh := t.client.Bucket(bucket).Object(object)
+	w := oh.NewWriter(context.Background())
+	w.Append = true
+	w.FinalizeOnClose = true
+	return uintptr(cgo.NewHandle(&writerFile{w}))
+}
+
+//export GoStorageClose
+func GoStorageClose(v uintptr) bool {
+	slog.Debug("mrd close", "handle", v)
+	f, h, ok := handle[goFile](v)
+	if !ok {
+		return false
 	}
 	h.Delete()
-	if err := mrd.Close(); err != nil {
-		slog.Error("mrd close error (swallowing)", "error", err)
+	if err := f.Close(); err != nil {
+		slog.Error("go storage close error (swallowing)", "error", err)
 	}
-
-	return 0
+	return true
 }
 
-//export MrdQueue
-func MrdQueue(td uintptr, v uintptr, iou unsafe.Pointer, offset int64, b unsafe.Pointer, bl C.int) int {
-	slog.Debug("mrd queue", "td", td, "handle", v)
-	t, _, ok := handle[threadData](td)
-	if !ok {
-		slog.Error("queue: wrong type handle", "td", td)
-		return -1
-	}
-	mrd, _, ok := handle[storage.MultiRangeDownloader](v)
+//export GoStorageQueue
+func GoStorageQueue(v uintptr, iou unsafe.Pointer, offset int64, b unsafe.Pointer, bl C.int) int {
+	slog.Debug("go storage queue", "handle", v)
+	f, _, ok := handle[goFile](v)
 	if !ok {
 		slog.Error("queue: wrong type handle", "v", v)
 		return -1
 	}
 
-	buf := bytes.NewBuffer(C.GoBytes(b, bl))
-	mrd.Add(buf, offset, int64(bl), func(offset, length int64, err error) {
-		t.completions <- mrdReadResult{iou, err}
+	return f.enqueue(C.GoBytes(b, bl), offset, iou)
+}
+
+func (m *mrdFile) Close() error {
+	return m.mrd.Close()
+}
+
+func (m *mrdFile) enqueue(p []byte, offset int64, tag unsafe.Pointer) int {
+	buf := bytes.NewBuffer(p)
+	m.mrd.Add(buf, offset, int64(len(p)), func(offset, length int64, err error) {
+		m.completions <- iouCompletion{tag, err}
 	})
-	return 0
+	return fioQQueued
+}
+
+func (w *writerFile) Close() error {
+	return w.w.Close()
+}
+
+func (w *writerFile) enqueue(p []byte, offset int64, tag unsafe.Pointer) int {
+	if _, err := w.w.Write(p); err != nil {
+		slog.Error("write error", "error", err)
+		return -1
+	}
+	return fioQCompleted
 }
 
 func main() {}

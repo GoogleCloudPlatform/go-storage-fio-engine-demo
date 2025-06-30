@@ -21,7 +21,7 @@ static_assert(sizeof(void*) == sizeof(GoUintptr),
               "can't use GoUintptr directly as void*");
 
 int go_storage_init(struct thread_data* td) {
-  GoUintptr completions = MrdInit(td->o.iodepth);
+  GoUintptr completions = GoStorageInit(td->o.iodepth);
   if (completions == 0) {
     return 1;
   }
@@ -29,48 +29,63 @@ int go_storage_init(struct thread_data* td) {
   return 0;
 }
 void go_storage_cleanup(struct thread_data* td) {
-  MrdCleanup((GoUintptr)td->io_ops_data);
+  GoStorageCleanup((GoUintptr)td->io_ops_data);
 }
 
-int go_storage_getevents(struct thread_data* td, unsigned int min, unsigned int max, const struct timespec* t) {
+int go_storage_getevents(struct thread_data* td, unsigned int min,
+                         unsigned int max, const struct timespec* t) {
   // TODO: don't ignore timeout t
   GoUintptr completions = (GoUintptr)td->io_ops_data;
-  return MrdAwaitCompletions(completions, min, max);
+  int got = GoStorageAwaitCompletions(completions, min, max);
+  return got < 0 ? -EIO : got;
 }
 
 struct io_u* go_storage_event(struct thread_data* td, int ev) {
   GoUintptr completions = (GoUintptr)td->io_ops_data;
-  struct MrdGetEvent_return r = MrdGetEvent(completions);
+  struct GoStorageGetEvent_return r = GoStorageGetEvent(completions);
   struct io_u* iou = (struct io_u*)r.r0;
-  iou->error = r.r1;
+  if (!/*ok=*/r.r1) {
+    iou->error = EIO;
+  }
   return iou;
 }
 
 int go_storage_open_file(struct thread_data* td, struct fio_file* f) {
   GoUintptr completions = (GoUintptr)td->io_ops_data;
-  GoUintptr mrd = MrdOpen(completions, f->file_name);
-  if (mrd == 0) {
-    return 1;
+  GoUintptr go_file = 0;
+  if (td_rw(td)) {
+    printf("Go Storage only supports readonly and writeonly files");
+    return EINVAL;
   }
-  f->engine_data = (void*)mrd;
+  if (td_read(td)) {
+    go_file = GoStorageOpenReadonly(completions, f->file_name);
+  }
+  if (td->o.td_ddir == TD_DDIR_WRITE) {
+    // We only support sequential, non-trimming writes.
+    go_file = GoStorageOpenWriteonly(completions, f->file_name);
+  }
+
+  if (go_file == 0) {
+    return EIO;
+  }
+  f->engine_data = (void*)go_file;
   return 0;
 }
 int go_storage_close_file(struct thread_data* td, struct fio_file* f) {
-  int result = MrdClose((GoUintptr)f->engine_data);
+  bool ok = GoStorageClose((GoUintptr)f->engine_data);
   f->engine_data = NULL;
-  return result;
+  return ok ? 0 : EIO;
 }
 
 enum fio_q_status go_storage_queue(struct thread_data* td, struct io_u* iou) {
-  GoUintptr completions = (GoUintptr)td->io_ops_data;
-  GoUintptr mrd = (GoUintptr)iou->file->engine_data;
-  if (iou->ddir != DDIR_READ) {
-    printf("iou->ddr is not ddir_read: %d\n", iou->ddir);
-    iou->error = EINVAL;
+  GoUintptr go_file = (GoUintptr)iou->file->engine_data;
+  int result = GoStorageQueue(go_file, iou, iou->offset, iou->xfer_buf,
+                              iou->xfer_buflen);
+  if (result < 0) {
+    iou->error = EIO;
     return FIO_Q_COMPLETED;
   }
-  iou->error = MrdQueue(completions, mrd, iou, iou->offset, iou->xfer_buf, iou->xfer_buflen);
-  return FIO_Q_QUEUED;
+  return result;
 }
 
 struct ioengine_ops ioengine = {
