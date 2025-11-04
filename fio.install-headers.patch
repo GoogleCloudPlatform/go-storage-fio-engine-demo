@@ -1,0 +1,28 @@
+diff --git a/Makefile b/Makefile
+index 746a27d4..6ab07a1e 100644
+--- a/Makefile
++++ b/Makefile
+@@ -483,6 +483,7 @@ else
+ endif
+ prefix = $(INSTALL_PREFIX)
+ bindir = $(prefix)/bin
++incdir = $(prefix)/include
+ libdir = $(prefix)/lib/fio
+ 
+ ifeq ($(CONFIG_TARGET_OS), Darwin)
+@@ -695,5 +696,15 @@ endif
+ 	$(INSTALL) -m 644 $(SRCDIR)/tools/hist/fiologparser_hist.py.1 $(DESTDIR)$(mandir)/man1
+ 	$(INSTALL) -m 755 -d $(DESTDIR)$(sharedir)
+ 	$(INSTALL) -m 644 $(SRCDIR)/tools/plot/*gpm $(DESTDIR)$(sharedir)/
++	# config-host.h lives in the build directory, unlike other headers.
++	$(INSTALL) -m 644 -D -t $(DESTDIR)$(incdir)/ config-host.h $(SRCDIR)/*.h
++	$(INSTALL) -m 644 -D -t $(DESTDIR)$(incdir)/arch $(SRCDIR)/arch/*.h
++	$(INSTALL) -m 644 -D -t $(DESTDIR)$(incdir)/compiler $(SRCDIR)/compiler/*.h
++	$(INSTALL) -m 644 -D -t $(DESTDIR)$(incdir)/crc $(SRCDIR)/crc/*.h
++	$(INSTALL) -m 644 -D -t $(DESTDIR)$(incdir)/engines $(SRCDIR)/engines/*.h
++	$(INSTALL) -m 644 -D -t $(DESTDIR)$(incdir)/lib $(SRCDIR)/lib/*.h
++	$(INSTALL) -m 644 -D -t $(DESTDIR)$(incdir)/os $(SRCDIR)/os/*.h
++	$(INSTALL) -m 644 -D -t $(DESTDIR)$(incdir)/oslib $(SRCDIR)/oslib/*.h
++	$(INSTALL) -m 644 -D -t $(DESTDIR)$(incdir)/os/linux $(SRCDIR)/os/linux/*.h
+ 
+ .PHONY: test fulltest

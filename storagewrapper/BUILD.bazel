@@ -1,0 +1,23 @@
+load("@gazelle//:def.bzl", "gazelle")
+load("@rules_go//go:def.bzl", "go_binary", "go_library")
+
+gazelle(name = "gazelle")
+
+go_binary(
+    name = "storagewrapper",
+    embed = [":storagewrapper_lib"],
+    linkmode = "c-archive",
+    visibility = ["//visibility:public"],
+)
+
+go_library(
+    name = "storagewrapper_lib",
+    srcs = ["storagewrapper.go"],
+    cgo = True,
+    importpath = "storagewrapper",
+    visibility = ["//visibility:private"],
+    deps = [
+        "@com_google_cloud_go_storage//:storage",
+        "@com_google_cloud_go_storage//experimental",
+    ],
+)

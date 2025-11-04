@@ -1,0 +1,21 @@
+load("@rules_cc//cc:cc_binary.bzl", "cc_binary")
+load("@rules_cc//cc:cc_shared_library.bzl", "cc_shared_library")
+
+cc_library(
+    name = "ioengine",
+    srcs = [
+        "go-storage-fio-engine.c",
+        "//storagewrapper",
+    ],
+    defines = ["_GNU_SOURCE"],
+    deps = [
+        "@fio_repo//:hdr_lib",
+        "//storagewrapper",
+    ],
+)
+
+cc_shared_library(
+    name = "ioengine_shared",
+    shared_lib_name = "libgo-storage-fio-engine.so",
+    deps = [":ioengine"],
+)

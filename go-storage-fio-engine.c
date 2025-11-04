@@ -6,6 +6,7 @@
  * https://opensource.org/licenses/MIT.
  */
 
+#include "config-host.h"
 #include "fio.h"
 #include "storagewrapper/storagewrapper.h"
 

@@ -211,7 +211,6 @@ func GoStorageOpenWriteonly(td uintptr, flush_after_every_write bool, file_name_
 	oh := t.client.Bucket(bucket).Object(object)
 	w := oh.NewWriter(context.Background())
 	w.Append = true
-	w.FinalizeOnClose = true
 	return uintptr(cgo.NewHandle(&writerFile{w, flush_after_every_write}))
 }
 
