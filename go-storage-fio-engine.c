@@ -46,7 +46,7 @@ int go_storage_open_file(struct thread_data* td, struct fio_file* f) {
   GoUintptr completions = (GoUintptr)td->io_ops_data;
   GoUintptr go_file = 0;
   if (td_rw(td)) {
-    printf("Go Storage only supports readonly and writeonly files");
+    printf("Go Storage only supports readonly and writeonly files\n");
     return EINVAL;
   }
   if (td_read(td)) {
@@ -54,7 +54,7 @@ int go_storage_open_file(struct thread_data* td, struct fio_file* f) {
   }
   if (td->o.td_ddir == TD_DDIR_WRITE) {
     // We only support sequential, non-trimming writes.
-    go_file = GoStorageOpenWriteonly(completions, f->file_name);
+    go_file = GoStorageOpenWriteonly(completions, td->o.odirect, f->file_name);
   }
 
   if (go_file == 0) {

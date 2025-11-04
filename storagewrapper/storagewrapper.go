@@ -54,7 +54,8 @@ type mrdFile struct {
 }
 
 type writerFile struct {
-	w *storage.Writer
+	w                    *storage.Writer
+	flushAfterEveryWrite bool
 }
 
 type goFile interface {
@@ -187,7 +188,7 @@ func GoStorageOpenReadonly(td uintptr, file_name_cstr *C.char) uintptr {
 }
 
 //export GoStorageOpenWriteonly
-func GoStorageOpenWriteonly(td uintptr, file_name_cstr *C.char) uintptr {
+func GoStorageOpenWriteonly(td uintptr, flush_after_every_write bool, file_name_cstr *C.char) uintptr {
 	file_name := C.GoString(file_name_cstr)
 	slog.Debug("go storage open writeonly", "td", td, "file_name", file_name)
 	bucket, object, ok := strings.Cut(file_name, "/")
@@ -206,7 +207,7 @@ func GoStorageOpenWriteonly(td uintptr, file_name_cstr *C.char) uintptr {
 	w := oh.NewWriter(context.Background())
 	w.Append = true
 	w.FinalizeOnClose = true
-	return uintptr(cgo.NewHandle(&writerFile{w}))
+	return uintptr(cgo.NewHandle(&writerFile{w, flush_after_every_write}))
 }
 
 //export GoStorageClose
@@ -255,6 +256,12 @@ func (w *writerFile) enqueue(p []byte, offset int64, tag unsafe.Pointer) int {
 	if _, err := w.w.Write(p); err != nil {
 		slog.Error("write error", "error", err)
 		return -1
+	}
+	if w.flushAfterEveryWrite {
+		if _, err := w.w.Flush(); err != nil {
+			slog.Error("flush error", "error", err)
+			return -1
+		}
 	}
 	return fioQCompleted
 }
