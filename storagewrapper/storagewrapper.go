@@ -17,6 +17,7 @@ import (
 	"unsafe"
 
 	"cloud.google.com/go/storage"
+	"cloud.google.com/go/storage/experimental"
 )
 
 const (
@@ -78,8 +79,12 @@ func handle[T any](v uintptr) (T, cgo.Handle, bool) {
 //export GoStorageInit
 func GoStorageInit(iodepth uint) uintptr {
 	slog.Info("go storage init", "iodepth", iodepth)
-	// Client metrics are super verbose on startup, so turn them off.
-	c, err := storage.NewGRPCClient(context.Background(), storage.WithDisabledClientMetrics())
+	c, err := storage.NewGRPCClient(
+		context.Background(),
+		// Client metrics are super verbose on startup, so turn them off.
+		storage.WithDisabledClientMetrics(),
+		experimental.WithGRPCBidiReads(),
+	)
 	if err != nil {
 		slog.Error("failed client creation", "error", err)
 		return 0
