@@ -1,9 +1,9 @@
 # `fio` ioengine for the Google Cloud Storage Rapid storage class (Go SDK)
 
 This is an external `fio` ioengine designed to maximize performance with
-Google Cloud Storage's Rapid storage class leveraging interfaces
+Google Cloud Storage's Rapid storage class. It leverages interfaces
 provided by the Google Cloud Storage Go SDK (`cloud.google.com/go/storage`)
-that have been optimized for it.
+that have been optimized for Rapid.
 
 This engine also serves as a practical example of how to use the Go SDK to
 take advantage of the capabilites and performance offered by the Rapid
@@ -11,8 +11,8 @@ storage class.
 
 > [!NOTE] 
 > This ioengine is exclusively for buckets using the Rapid storage class.
-It performs synchronous sequential writes and does not include prefetching or
-read-ahead optimizations.
+> It performs synchronous sequential writes and does not include prefetching or
+> read-ahead optimizations.
 
 ## Quickstart
 
