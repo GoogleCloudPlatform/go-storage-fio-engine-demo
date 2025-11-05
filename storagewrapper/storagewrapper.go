@@ -10,6 +10,9 @@ import "C"
 import (
 	"bytes"
 	"context"
+	"crypto/rand"
+	"errors"
+	"fmt"
 	"io"
 	"log/slog"
 	"runtime/cgo"
@@ -76,6 +79,20 @@ func handle[T any](v uintptr) (T, cgo.Handle, bool) {
 	return t, h, true
 }
 
+func filenameObjectHandle(td uintptr, filename string) (*threadData, *storage.ObjectHandle, error) {
+	bucket, object, ok := strings.Cut(filename, "/")
+	if !ok {
+		return nil, nil, fmt.Errorf("could not extract bucket from filename %v", filename)
+	}
+
+	t, _, ok := handle[*threadData](td)
+	if !ok {
+		return nil, nil, fmt.Errorf("handle %d not of type *threadData", td)
+	}
+
+	return t, t.client.Bucket(bucket).Object(object), nil
+}
+
 //export GoStorageInit
 func GoStorageInit(iodepth uint) uintptr {
 	slog.Info("go storage init", "iodepth", iodepth)
@@ -86,7 +103,7 @@ func GoStorageInit(iodepth uint) uintptr {
 		experimental.WithGRPCBidiReads(),
 	)
 	if err != nil {
-		slog.Error("failed client creation", "error", err)
+		slog.Error("failed client creation", "err", err)
 		return 0
 	}
 	c.SetRetry(storage.WithErrorFunc(shouldRetry))
@@ -161,57 +178,43 @@ func GoStorageGetEvent(td uintptr) (iou unsafe.Pointer, ok bool) {
 	t.reapedCompletions = t.reapedCompletions[:len(t.reapedCompletions)-1]
 	ok = true
 	if v.err != nil {
-		slog.Error("get event: reaped completion error", "error", v.err)
+		slog.Error("get event: reaped completion error", "err", v.err)
 		ok = false
 	}
 	return v.iou, ok
 }
 
 //export GoStorageOpenReadonly
-func GoStorageOpenReadonly(td uintptr, file_name_cstr *C.char) uintptr {
-	file_name := C.GoString(file_name_cstr)
-	slog.Debug("go storage open readonly", "td", td, "file_name", file_name)
-	bucket, object, ok := strings.Cut(file_name, "/")
-	if !ok {
-		slog.Error("could not extract bucket from filename", "file_name", file_name)
+func GoStorageOpenReadonly(td uintptr, filenameCstr *C.char) uintptr {
+	filename := C.GoString(filenameCstr)
+	slog.Debug("go storage open readonly", "td", td, "filename", filename)
+	t, oh, err := filenameObjectHandle(td, filename)
+	if err != nil {
+		slog.Error("open: error getting *storage.ObjectHandle", "err", err)
 		return 0
 	}
 
-	t, _, ok := handle[*threadData](td)
-	if !ok {
-		slog.Error("open: wrong type handle", "td", td)
-		return 0
-	}
-
-	oh := t.client.Bucket(bucket).Object(object)
 	mrd, err := oh.NewMultiRangeDownloader(context.Background())
 	if err != nil {
-		slog.Error("failed MRD open", "bucket", bucket, "object", object, "error", err)
+		slog.Error("failed MRD open", "filename", filename, "err", err)
 		return 0
 	}
 	return uintptr(cgo.NewHandle(&mrdFile{t.completions, mrd}))
 }
 
 //export GoStorageOpenWriteonly
-func GoStorageOpenWriteonly(td uintptr, flush_after_every_write bool, file_name_cstr *C.char) uintptr {
-	file_name := C.GoString(file_name_cstr)
-	slog.Debug("go storage open writeonly", "td", td, "file_name", file_name)
-	bucket, object, ok := strings.Cut(file_name, "/")
-	if !ok {
-		slog.Error("could not extract bucket from filename", "file_name", file_name)
+func GoStorageOpenWriteonly(td uintptr, flushAfterEveryWrite bool, filenameCstr *C.char) uintptr {
+	filename := C.GoString(filenameCstr)
+	slog.Debug("go storage open writeonly", "td", td, "filename", filename)
+	_, oh, err := filenameObjectHandle(td, filename)
+	if err != nil {
+		slog.Error("open: error getting *storage.ObjectHandle", "err", err)
 		return 0
 	}
 
-	t, _, ok := handle[*threadData](td)
-	if !ok {
-		slog.Error("open: wrong type handle", "td", td)
-		return 0
-	}
-
-	oh := t.client.Bucket(bucket).Object(object)
-	w := oh.NewWriter(context.Background())
+	w := oh.Retryer(storage.WithPolicy(storage.RetryAlways)).NewWriter(context.Background())
 	w.Append = true
-	return uintptr(cgo.NewHandle(&writerFile{w, flush_after_every_write}))
+	return uintptr(cgo.NewHandle(&writerFile{w, flushAfterEveryWrite}))
 }
 
 //export GoStorageClose
@@ -223,7 +226,7 @@ func GoStorageClose(v uintptr) bool {
 	}
 	h.Delete()
 	if err := f.Close(); err != nil {
-		slog.Error("go storage close error (swallowing)", "error", err)
+		slog.Error("go storage close error (swallowing)", "err", err)
 	}
 	return true
 }
@@ -258,16 +261,67 @@ func (w *writerFile) Close() error {
 
 func (w *writerFile) enqueue(p []byte, offset int64, tag unsafe.Pointer) int {
 	if _, err := w.w.Write(p); err != nil {
-		slog.Error("write error", "error", err)
+		slog.Error("write error", "err", err)
 		return -1
 	}
 	if w.flushAfterEveryWrite {
 		if _, err := w.w.Flush(); err != nil {
-			slog.Error("flush error", "error", err)
+			slog.Error("flush error", "err", err)
 			return -1
 		}
 	}
 	return fioQCompleted
+}
+
+func getObjectSize(oh *storage.ObjectHandle) (int64, error) {
+	attrs, err := oh.Attrs(context.Background())
+	if errors.Is(err, storage.ErrObjectNotExist) {
+		// Nonexistent objects are fine - assume size 0
+		return 0, nil
+	}
+	if err != nil {
+		return 0, err
+	}
+	return attrs.Size, nil
+}
+
+//export GoStoragePrepopulateFile
+func GoStoragePrepopulateFile(td uintptr, filenameCstr *C.char, fileSize int64) bool {
+	filename := C.GoString(filenameCstr)
+	slog.Debug("go storage prepopulate", "filename", filename, "size", fileSize)
+	_, oh, err := filenameObjectHandle(td, filename)
+	if err != nil {
+		slog.Error("prepopulate: error getting *storage.ObjectHandle", "err", err)
+		return false
+	}
+
+	size, err := getObjectSize(oh)
+	if err != nil {
+		slog.Error("prepopulate: failed to get object size", "filename", filename, "err", err)
+		return false
+	}
+	if size >= fileSize {
+		// No need to prepopulate this file - it is already large enough
+		return true
+	}
+
+	// Prepopulate with random data. Always retry transient errors.
+	w := oh.Retryer(storage.WithPolicy(storage.RetryAlways)).NewWriter(context.Background())
+	w.Append = true
+	if _, err := io.CopyN(w, rand.Reader, fileSize); err != nil {
+		slog.Error("failed to copy random bytes to writer", "filename", filename, "err", err)
+		if err := w.Close(); err != nil {
+			slog.Error("(expected) failed to close after write failure", "filename", filename, "err", err)
+		}
+		return false
+	}
+
+	if err := w.Close(); err != nil {
+		slog.Error("failed to close after writing random bytes", "filename", filename, "err", err)
+		return false
+	}
+
+	return true
 }
 
 func main() {}

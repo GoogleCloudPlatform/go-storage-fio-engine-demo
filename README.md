@@ -223,6 +223,5 @@ parallelism. The engine has no nice user-facing error if you don't set
 
 The `getevents` handler does not respect the `fio`-provided timeout.
 
-This engine cannot prepopulate objects for read tests, you must create the
-objects yourself in advance. You can use a `--rw=write` job to do so, as in the
-examples above.
+This engine only prepopulates objects with random data. Verifiable patterns are
+not supported.
