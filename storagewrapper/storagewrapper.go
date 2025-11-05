@@ -29,7 +29,7 @@ const (
 
 func init() {
 	// TODO: Consider doing this in the engine, via options.
-	slog.SetLogLoggerLevel(100)
+	slog.SetLogLoggerLevel(slog.LevelError)
 }
 
 func shouldRetry(err error) bool {
