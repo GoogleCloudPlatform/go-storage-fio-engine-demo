@@ -38,72 +38,10 @@ Execute the following from the root dir of this repo:
 ```bash
 bazel-bin/external/_main~_repo_rules~fio_repo/fio_build/bin/fio \
   --name=go_storage_fio \
-  --rw=write \
-  --ioengine=external:bazel-bin/libgo-storage-fio-engine.so \
-  --thread \
-  --clat_percentiles=0 \
-  --lat_percentiles=1 \
-  --group_reporting=1 \
-  --filename_format="${BUCKET?}/${PREFIX?}"'$jobname.$jobnum.$filenum' \
-  --size=100% \
-  --filesize="${OBJECTSIZE?}" \
-  --bs=16M \
-  --numjobs=1 \
-  --iodepth=1
-```
-
-This will run a write throughput test to fill one file to `OBJECTSIZE` with
-16MiB writes.
-
-## More examples
-
-Measure 50 clients each writing one $OBJECTSIZE object concurrently:
-
-```
-bazel-bin/external/_main~_repo_rules~fio_repo/fio_build/bin/fio \
-  --name=go_storage_fio \
-  --rw=write \
-  --ioengine=external:bazel-bin/libgo-storage-fio-engine.so \
-  --thread \
-  --clat_percentiles=0 \
-  --lat_percentiles=1 \
-  --group_reporting=1 \
-  --filename_format="${BUCKET?}/${PREFIX?}"'$jobname.$jobnum.$filenum' \
-  --size=100% \
-  --filesize="${OBJECTSIZE?}" \
-  --bs=16M \
-  --numjobs=50 \
-  --iodepth=1
-```
-
-Measure one client writing 50 x $OBJECTSIZE objects concurrently:
-
-```
-bazel-bin/external/_main~_repo_rules~fio_repo/fio_build/bin/fio \
-  --name=go_storage_fio \
-  --rw=write \
-  --ioengine=external:bazel-bin/libgo-storage-fio-engine.so \
-  --thread \
-  --clat_percentiles=0 \
-  --lat_percentiles=1 \
-  --group_reporting=1 \
-  --filename_format="${BUCKET?}/${PREFIX?}"'$jobname.$jobnum.$filenum' \
-  --size=100% \
-  --filesize="${OBJECTSIZE?}" \
-  --bs=16M \
-  --numjobs=1 \
-  --nrfiles=50 \
-  --iodepth=1
-```
-
-Measure one outstanding 8K op for one minute:
-
-```
-bazel-bin/external/_main~_repo_rules~fio_repo/fio_build/bin/fio \
-  --name=go_storage_fio \
   --rw=randread \
   --ioengine=external:bazel-bin/libgo-storage-fio-engine.so \
   --thread \
+  --create_serialize=0 \
   --clat_percentiles=0 \
   --lat_percentiles=1 \
   --group_reporting=1 \
@@ -119,14 +57,20 @@ bazel-bin/external/_main~_repo_rules~fio_repo/fio_build/bin/fio \
   --iodepth=1
 ```
 
+This will run a read latency test for one outstanding 8K random read to an
+object of size `OBJECTSIZE` for one minute.
+
+## More examples
+
 Measure 50 concurrent 8K ops on a single object stream for one minute:
 
-```
+```bash
 bazel-bin/external/_main~_repo_rules~fio_repo/fio_build/bin/fio \
   --name=go_storage_fio \
   --rw=randread \
   --ioengine=external:bazel-bin/libgo-storage-fio-engine.so \
   --thread \
+  --create_serialize=0 \
   --clat_percentiles=0 \
   --lat_percentiles=1 \
   --group_reporting=1 \
@@ -144,12 +88,13 @@ bazel-bin/external/_main~_repo_rules~fio_repo/fio_build/bin/fio \
 
 Measure one outstanding 8K op on 50 separate object streams for one minute:
 
-```
+```bash
 bazel-bin/external/_main~_repo_rules~fio_repo/fio_build/bin/fio \
   --name=go_storage_fio \
   --rw=randread \
   --ioengine=external:bazel-bin/libgo-storage-fio-engine.so \
   --thread \
+  --create_serialize=0 \
   --clat_percentiles=0 \
   --lat_percentiles=1 \
   --group_reporting=1 \
@@ -168,16 +113,17 @@ bazel-bin/external/_main~_repo_rules~fio_repo/fio_build/bin/fio \
 Measure one outstanding 8K op on 50 separate object streams _to the same object_
 for one minute:
 
-```
+```bash
 bazel-bin/external/_main~_repo_rules~fio_repo/fio_build/bin/fio \
   --name=go_storage_fio \
   --rw=randread \
   --ioengine=external:bazel-bin/libgo-storage-fio-engine.so \
   --thread \
+  --create_serialize=0 \
   --clat_percentiles=0 \
   --lat_percentiles=1 \
   --group_reporting=1 \
-  --filename_format="${BUCKET?}/${PREFIX?}"'$jobname.$filenum.$jobnum' \
+  --filename="${BUCKET?}/${PREFIX?}one-file-many-streams" \
   --size=100% \
   --filesize="${OBJECTSIZE?}" \
   --time_based=1 \
@@ -189,14 +135,76 @@ bazel-bin/external/_main~_repo_rules~fio_repo/fio_build/bin/fio \
   --iodepth=1
 ```
 
+Measure one client writing one `OBJECTSIZE` object with 16MiB writes.
+
+```bash
+bazel-bin/external/_main~_repo_rules~fio_repo/fio_build/bin/fio \
+  --name=go_storage_fio \
+  --rw=write \
+  --ioengine=external:bazel-bin/libgo-storage-fio-engine.so \
+  --thread \
+  --create_serialize=0 \
+  --clat_percentiles=0 \
+  --lat_percentiles=1 \
+  --group_reporting=1 \
+  --filename_format="${BUCKET?}/${PREFIX?}"'$jobname.$jobnum.$filenum' \
+  --size=100% \
+  --filesize="${OBJECTSIZE?}" \
+  --bs=16M \
+  --numjobs=1 \
+  --iodepth=1
+```
+
+Measure 50 clients each writing one `OBJECTSIZE` object concurrently:
+
+```bash
+bazel-bin/external/_main~_repo_rules~fio_repo/fio_build/bin/fio \
+  --name=go_storage_fio \
+  --rw=write \
+  --ioengine=external:bazel-bin/libgo-storage-fio-engine.so \
+  --thread \
+  --create_serialize=0 \
+  --clat_percentiles=0 \
+  --lat_percentiles=1 \
+  --group_reporting=1 \
+  --filename_format="${BUCKET?}/${PREFIX?}"'$jobname.$jobnum.$filenum' \
+  --size=100% \
+  --filesize="${OBJECTSIZE?}" \
+  --bs=16M \
+  --numjobs=50 \
+  --iodepth=1
+```
+
+Measure one client writing 50 `OBJECTSIZE` objects concurrently:
+
+```bash
+bazel-bin/external/_main~_repo_rules~fio_repo/fio_build/bin/fio \
+  --name=go_storage_fio \
+  --rw=write \
+  --ioengine=external:bazel-bin/libgo-storage-fio-engine.so \
+  --thread \
+  --create_serialize=0 \
+  --clat_percentiles=0 \
+  --lat_percentiles=1 \
+  --group_reporting=1 \
+  --filename_format="${BUCKET?}/${PREFIX?}"'$jobname.$jobnum.$filenum' \
+  --size=100% \
+  --filesize="${OBJECTSIZE?}" \
+  --bs=16M \
+  --numjobs=1 \
+  --nrfiles=50 \
+  --iodepth=1
+```
+
 Measure 16 outstanding 10M ops on 10 separate object streams for one minute:
 
-```
+```bash
 bazel-bin/external/_main~_repo_rules~fio_repo/fio_build/bin/fio \
   --name=go_storage_fio \
   --rw=randread \
   --ioengine=external:bazel-bin/libgo-storage-fio-engine.so \
   --thread \
+  --create_serialize=0 \
   --clat_percentiles=0 \
   --lat_percentiles=1 \
   --group_reporting=1 \
