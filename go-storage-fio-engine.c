@@ -14,6 +14,10 @@ static_assert(sizeof(void*) == sizeof(GoUintptr),
               "can't use GoUintptr directly as void*");
 
 int go_storage_init(struct thread_data* td) {
+  if (td->io_ops_data != NULL) {
+    return 0;
+  }
+
   GoUintptr completions = GoStorageInit(td->o.iodepth);
   if (completions == 0) {
     return 1;
@@ -81,10 +85,21 @@ enum fio_q_status go_storage_queue(struct thread_data* td, struct io_u* iou) {
   return result;
 }
 
+int go_storage_prepopulate_file(struct thread_data* td, struct fio_file* f) {
+  if (td_write(td)) {
+    // Don't prepopulate for writes.
+    return 0;
+  }
+  bool ok = GoStoragePrepopulateFile((GoUintptr)td->io_ops_data, f->file_name,
+                                     f->io_size);
+  return ok ? 0 : EIO;
+}
+
 struct ioengine_ops ioengine = {
   .name = "go-storage",
   .version = FIO_IOOPS_VERSION,
   .flags = FIO_DISKLESSIO | FIO_NOEXTEND | FIO_NODISKUTIL,
+  .setup = go_storage_init,
   .init = go_storage_init,
   .cleanup = go_storage_cleanup,
   .open_file = go_storage_open_file,
@@ -92,4 +107,5 @@ struct ioengine_ops ioengine = {
   .queue = go_storage_queue,
   .getevents = go_storage_getevents,
   .event = go_storage_event,
+  .prepopulate_file = go_storage_prepopulate_file,
 };
