@@ -9,7 +9,7 @@ This engine also serves as a practical example of how to use the Go SDK to
 take advantage of the capabilites and performance offered by the Rapid
 storage class.
 
-> [!NOTE] 
+> [!NOTE]
 > This ioengine is exclusively for buckets using the Rapid storage class.
 > It performs synchronous sequential writes and does not include prefetching or
 > read-ahead optimizations.
@@ -31,7 +31,7 @@ Next, build `fio` and the ioengine shared library with:
 
 Finally, run a test. Set `BUCKET` to the name of a Rapid Storage zonal bucket,
 `PREFIX` to a prefix for fio-created objects under that bucket, and
-`OBJECTSIZE` to the desired object size.
+`OBJECTSIZE` to the desired object size (e.g. 1G).
 
 Execute the following from the root dir of this repo:
 
@@ -57,7 +57,7 @@ This will run a write throughput test to fill one file to `OBJECTSIZE` with
 
 ## More examples
 
-Measure 10 clients each writing one 10GiB object concurrently:
+Measure 50 clients each writing one $OBJECTSIZE object concurrently:
 
 ```
 bazel-bin/external/_main~_repo_rules~fio_repo/fio_build/bin/fio \
@@ -70,14 +70,13 @@ bazel-bin/external/_main~_repo_rules~fio_repo/fio_build/bin/fio \
   --group_reporting=1 \
   --filename_format="${BUCKET?}/${PREFIX?}"'$jobname.$jobnum.$filenum' \
   --size=100% \
-  --filesize=10G \
+  --filesize="${OBJECTSIZE?}" \
   --bs=16M \
-  --numjobs=10 \
+  --numjobs=50 \
   --iodepth=1
 ```
 
-
-Measure one client writing 10 x 10GiB objects concurrently:
+Measure one client writing 50 x $OBJECTSIZE objects concurrently:
 
 ```
 bazel-bin/external/_main~_repo_rules~fio_repo/fio_build/bin/fio \
@@ -90,10 +89,10 @@ bazel-bin/external/_main~_repo_rules~fio_repo/fio_build/bin/fio \
   --group_reporting=1 \
   --filename_format="${BUCKET?}/${PREFIX?}"'$jobname.$jobnum.$filenum' \
   --size=100% \
-  --filesize=10G \
+  --filesize="${OBJECTSIZE?}" \
   --bs=16M \
   --numjobs=1 \
-  --nrfiles=10 \
+  --nrfiles=50 \
   --iodepth=1
 ```
 
@@ -110,7 +109,7 @@ bazel-bin/external/_main~_repo_rules~fio_repo/fio_build/bin/fio \
   --group_reporting=1 \
   --filename_format="${BUCKET?}/${PREFIX?}"'$jobname.$jobnum.$filenum' \
   --size=100% \
-  --filesize=10G \
+  --filesize="${OBJECTSIZE?}" \
   --time_based=1 \
   --ramp_time=5s \
   --runtime=1m \
@@ -131,9 +130,9 @@ bazel-bin/external/_main~_repo_rules~fio_repo/fio_build/bin/fio \
   --clat_percentiles=0 \
   --lat_percentiles=1 \
   --group_reporting=1 \
-  --filename_format="${BUCKET?}/${PREFIX?}"'$jobname.$jobnum.$filenum' \
+  --filename_format="${BUCKET?}/${PREFIX?}"'$jobname.$filenum.$jobnum' \
   --size=100% \
-  --filesize=10G \
+  --filesize="${OBJECTSIZE?}" \
   --time_based=1 \
   --ramp_time=5s \
   --runtime=1m \
@@ -154,9 +153,9 @@ bazel-bin/external/_main~_repo_rules~fio_repo/fio_build/bin/fio \
   --clat_percentiles=0 \
   --lat_percentiles=1 \
   --group_reporting=1 \
-  --filename_format="${BUCKET?}/${PREFIX?}"'$jobname.$jobnum.$filenum' \
+  --filename_format="${BUCKET?}/${PREFIX?}"'$jobname.$filenum.$jobnum' \
   --size=100% \
-  --filesize=10G \
+  --filesize="${OBJECTSIZE?}" \
   --time_based=1 \
   --ramp_time=5s \
   --runtime=1m \
@@ -178,9 +177,9 @@ bazel-bin/external/_main~_repo_rules~fio_repo/fio_build/bin/fio \
   --clat_percentiles=0 \
   --lat_percentiles=1 \
   --group_reporting=1 \
-  --filename="${BUCKET?}/${PREFIX?}"'go_storage_fio.0.0' \
+  --filename_format="${BUCKET?}/${PREFIX?}"'$jobname.$filenum.$jobnum' \
   --size=100% \
-  --filesize=10G \
+  --filesize="${OBJECTSIZE?}" \
   --time_based=1 \
   --ramp_time=5s \
   --runtime=1m \
@@ -201,9 +200,9 @@ bazel-bin/external/_main~_repo_rules~fio_repo/fio_build/bin/fio \
   --clat_percentiles=0 \
   --lat_percentiles=1 \
   --group_reporting=1 \
-  --filename_format="${BUCKET?}/${PREFIX?}"'$jobname.$jobnum.$filenum' \
+  --filename_format="${BUCKET?}/${PREFIX?}"'$jobname.$filenum.$jobnum' \
   --size=100% \
-  --filesize=10G \
+  --filesize="${OBJECTSIZE?}" \
   --time_based=1 \
   --ramp_time=5s \
   --runtime=1m \
