@@ -119,7 +119,7 @@ bazel-bin/external/_main~_repo_rules~fio_repo/fio_build/bin/fio \
   --rw=randread \
   --ioengine=external:bazel-bin/libgo-storage-fio-engine.so \
   --thread \
-  --create_serialize=0 \
+  --create_serialize=1 \
   --clat_percentiles=0 \
   --lat_percentiles=1 \
   --group_reporting=1 \
