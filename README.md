@@ -23,7 +23,8 @@ Install [go](https://go.dev/), then
 go install github.com/bazelbuild/bazelisk@latest
 ```
 
-Next, build `fio` and the ioengine shared library with:
+Next, download and build all dependencies, `fio`, and the ioengine shared
+library with:
 
 ```bash
 "$(go env GOPATH)/bin/bazelisk" build -c opt //:ioengine_shared
@@ -233,3 +234,7 @@ The `getevents` handler does not respect the `fio`-provided timeout.
 
 This engine only prepopulates objects with random data. Verifiable patterns are
 not supported.
+
+Prepopulation cannot be cancelled with SIGINT/Ctrl-C.
+
+`fio` may hang if an error occurs at read high iodepth.
