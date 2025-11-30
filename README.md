@@ -223,6 +223,28 @@ bazel-bin/external/_main~_repo_rules~fio_repo/fio_build/bin/fio \
 
 For more details on arguments, see the `fio` documentation.
 
+## Buffered and direct IO behavior
+
+The behavior of the engine differs based on whether direct IO is enabled (e.g.,
+by using `--direct=1`).
+
+### Without direct IO (`--direct=0`):
+
+*   **Writes:** Write operations are buffered. Writes are flushed periodically.
+    The reported latency measures the time to buffer the data, which may include
+    a flush if the buffer was full.
+*   **Reads:** Each file on each thread uses a single read stream for all
+    operations. The reported latency measures the read operation on the existing
+    stream.
+
+### With direct IO (`--direct=1`):
+
+*   **Writes:** Write operations are flushed immediately. The reported latency
+    measures both the write and the flush.
+*   **Reads:** A new read stream is established for every read operation. The
+    reported latency measures setting up the stream, performing the read, and
+    closing the stream.
+
 ## Known issues
 
 This engine only works in threaded mode. The Go runtime has threads, and is

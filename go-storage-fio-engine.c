@@ -55,7 +55,7 @@ int go_storage_open_file(struct thread_data* td, struct fio_file* f) {
     return EINVAL;
   }
   if (td_read(td)) {
-    go_file = GoStorageOpenReadonly(completions, f->file_name);
+    go_file = GoStorageOpenReadonly(completions, td->o.odirect, f->file_name);
   }
   if (td->o.td_ddir == TD_DDIR_WRITE) {
     // We only support sequential, non-trimming writes.

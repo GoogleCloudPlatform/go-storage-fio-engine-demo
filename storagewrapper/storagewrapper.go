@@ -57,6 +57,11 @@ type mrdFile struct {
 	mrd         *storage.MultiRangeDownloader
 }
 
+type oDirectMrdFile struct {
+	completions chan<- iouCompletion
+	oh          *storage.ObjectHandle
+}
+
 type writerFile struct {
 	w                    *storage.Writer
 	flushAfterEveryWrite bool
@@ -185,13 +190,17 @@ func GoStorageGetEvent(td uintptr) (iou unsafe.Pointer, ok bool) {
 }
 
 //export GoStorageOpenReadonly
-func GoStorageOpenReadonly(td uintptr, filenameCstr *C.char) uintptr {
+func GoStorageOpenReadonly(td uintptr, oDirect bool, filenameCstr *C.char) uintptr {
 	filename := C.GoString(filenameCstr)
-	slog.Debug("go storage open readonly", "td", td, "filename", filename)
+	slog.Debug("go storage open readonly", "td", td, "oDirect", oDirect, "filename", filename)
 	t, oh, err := filenameObjectHandle(td, filename)
 	if err != nil {
 		slog.Error("open: error getting *storage.ObjectHandle", "err", err)
 		return 0
+	}
+
+	if oDirect {
+		return uintptr(cgo.NewHandle(&oDirectMrdFile{t.completions, oh}))
 	}
 
 	mrd, err := oh.NewMultiRangeDownloader(context.Background())
@@ -252,6 +261,32 @@ func (m *mrdFile) enqueue(p []byte, offset int64, tag unsafe.Pointer) int {
 	m.mrd.Add(buf, offset, int64(len(p)), func(offset, length int64, err error) {
 		m.completions <- iouCompletion{tag, err}
 	})
+	return fioQQueued
+}
+
+func (o *oDirectMrdFile) Close() error {
+	return nil
+}
+
+func (o *oDirectMrdFile) enqueue(p []byte, offset int64, tag unsafe.Pointer) int {
+	go func() {
+		mrd, err := o.oh.NewMultiRangeDownloader(context.Background())
+		if err != nil {
+			slog.Error("failed MRD open for O_DIRECT enqueue", "err", err)
+			o.completions <- iouCompletion{tag, err}
+			return
+		}
+		buf := bytes.NewBuffer(p)
+		errs := make(chan error)
+		mrd.Add(buf, offset, int64(len(p)), func(offset, length int64, err error) {
+			errs <- err
+		})
+		addErr := <-errs
+		if err := mrd.Close(); err != nil {
+			addErr = fmt.Errorf("%w%w", addErr, err)
+		}
+		o.completions <- iouCompletion{tag, addErr}
+	}()
 	return fioQQueued
 }
 
