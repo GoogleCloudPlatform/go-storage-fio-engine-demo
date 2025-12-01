@@ -283,7 +283,7 @@ func (o *oDirectMrdFile) enqueue(p []byte, offset int64, tag unsafe.Pointer) int
 		})
 		addErr := <-errs
 		if err := mrd.Close(); err != nil {
-			addErr = fmt.Errorf("%w%w", addErr, err)
+			addErr = fmt.Errorf("read error: %w; close error: %w", addErr, err)
 		}
 		o.completions <- iouCompletion{tag, addErr}
 	}()
