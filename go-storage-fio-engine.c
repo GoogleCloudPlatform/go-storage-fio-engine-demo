@@ -8,17 +8,45 @@
 
 #include "config-host.h"
 #include "fio.h"
+#include "optgroup.h"
 #include "storagewrapper/storagewrapper.h"
+
+struct go_options {
+  void* pad;
+  char* endpoint;
+};
+
+static struct fio_option options[] = {
+  {
+    .name = "go-storage-endpoint",
+    .lname = "go-storage-endpoint",
+    .type = FIO_OPT_STR_STORE,
+    .off1 = offsetof(struct go_options, endpoint),
+    .def = "",
+    .help = "Endpoint override for the Go Storage SDK",
+    .category = FIO_OPT_C_ENGINE,
+    .group = FIO_OPT_G_INVALID,
+  },
+  {
+    .name = NULL,
+  },
+};
 
 static_assert(sizeof(void*) == sizeof(GoUintptr),
               "can't use GoUintptr directly as void*");
 
 int go_storage_init(struct thread_data* td) {
+  struct go_options* opts = td->eo;
+  char* endpoint_override = "";
+  if (opts != NULL && opts->endpoint != NULL) {
+    endpoint_override = opts->endpoint;
+  }
+
   if (td->io_ops_data != NULL) {
     return 0;
   }
 
-  GoUintptr completions = GoStorageInit(td->o.iodepth);
+  GoUintptr completions = GoStorageInit(td->o.iodepth, endpoint_override);
   if (completions == 0) {
     return 1;
   }
@@ -108,4 +136,6 @@ struct ioengine_ops ioengine = {
   .getevents = go_storage_getevents,
   .event = go_storage_event,
   .prepopulate_file = go_storage_prepopulate_file,
+  .option_struct_size = sizeof(struct go_options),
+  .options = options,
 };

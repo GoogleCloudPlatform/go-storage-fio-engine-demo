@@ -19,5 +19,6 @@ go_library(
     deps = [
         "@com_google_cloud_go_storage//:storage",
         "@com_google_cloud_go_storage//experimental",
+        "@org_golang_google_api//option",
     ],
 )

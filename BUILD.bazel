@@ -9,8 +9,8 @@ cc_library(
     ],
     defines = ["_GNU_SOURCE"],
     deps = [
-        "@fio_repo//:hdr_lib",
         "//storagewrapper",
+        "@fio_repo//:hdr_lib",
     ],
 )
 

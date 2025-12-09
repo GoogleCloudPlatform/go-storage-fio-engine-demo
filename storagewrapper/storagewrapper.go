@@ -21,6 +21,7 @@ import (
 
 	"cloud.google.com/go/storage"
 	"cloud.google.com/go/storage/experimental"
+	"google.golang.org/api/option"
 )
 
 const (
@@ -99,14 +100,19 @@ func filenameObjectHandle(td uintptr, filename string) (*threadData, *storage.Ob
 }
 
 //export GoStorageInit
-func GoStorageInit(iodepth uint) uintptr {
-	slog.Info("go storage init", "iodepth", iodepth)
-	c, err := storage.NewGRPCClient(
-		context.Background(),
+func GoStorageInit(iodepth uint, endpoint_override *C.char) uintptr {
+	endpoint := C.GoString(endpoint_override)
+	slog.Info("go storage init", "iodepth", iodepth, "endpoint_override", endpoint)
+
+	opts := []option.ClientOption{
 		// Client metrics are super verbose on startup, so turn them off.
 		storage.WithDisabledClientMetrics(),
 		experimental.WithGRPCBidiReads(),
-	)
+	}
+	if endpoint != "" {
+		opts = append(opts, option.WithEndpoint(endpoint))
+	}
+	c, err := storage.NewGRPCClient(context.Background(), opts...)
 	if err != nil {
 		slog.Error("failed client creation", "err", err)
 		return 0
