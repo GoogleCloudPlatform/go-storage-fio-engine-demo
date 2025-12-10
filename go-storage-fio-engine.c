@@ -14,6 +14,7 @@
 struct go_options {
   void* pad;
   char* endpoint;
+  unsigned int connection_pool_size;
   unsigned int share_client;
 };
 
@@ -25,6 +26,16 @@ static struct fio_option options[] = {
         .off1 = offsetof(struct go_options, endpoint),
         .def = "",
         .help = "Endpoint override for the Go Storage SDK",
+        .category = FIO_OPT_C_ENGINE,
+        .group = FIO_OPT_G_INVALID,
+    },
+    {
+        .name = "go-storage-connection-pool-size",
+        .lname = "go-storage-connection-pool-size",
+        .type = FIO_OPT_INT,
+        .off1 = offsetof(struct go_options, connection_pool_size),
+        .def = "1",
+        .help = "Connection pool size option to provide to each client",
         .category = FIO_OPT_C_ENGINE,
         .group = FIO_OPT_G_INVALID,
     },
@@ -58,6 +69,7 @@ int go_storage_init(struct thread_data* td) {
   }
 
   GoUintptr completions = GoStorageInit(td->o.iodepth, endpoint_override,
+                                        (int)(opts->connection_pool_size),
                                         (bool)(opts->share_client));
   if (completions == 0) {
     return 1;
