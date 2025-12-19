@@ -14,22 +14,33 @@
 struct go_options {
   void* pad;
   char* endpoint;
+  unsigned int share_client;
 };
 
 static struct fio_option options[] = {
-  {
-    .name = "go-storage-endpoint",
-    .lname = "go-storage-endpoint",
-    .type = FIO_OPT_STR_STORE,
-    .off1 = offsetof(struct go_options, endpoint),
-    .def = "",
-    .help = "Endpoint override for the Go Storage SDK",
-    .category = FIO_OPT_C_ENGINE,
-    .group = FIO_OPT_G_INVALID,
-  },
-  {
-    .name = NULL,
-  },
+    {
+        .name = "go-storage-endpoint",
+        .lname = "go-storage-endpoint",
+        .type = FIO_OPT_STR_STORE,
+        .off1 = offsetof(struct go_options, endpoint),
+        .def = "",
+        .help = "Endpoint override for the Go Storage SDK",
+        .category = FIO_OPT_C_ENGINE,
+        .group = FIO_OPT_G_INVALID,
+    },
+    {
+        .name = "go-storage-threads-share-client",
+        .lname = "go-storage-threads-share-client",
+        .type = FIO_OPT_BOOL,
+        .off1 = offsetof(struct go_options, share_client),
+        .def = "0",
+        .help = "If true, multiple threads will share a single Go SDK client",
+        .category = FIO_OPT_C_ENGINE,
+        .group = FIO_OPT_G_INVALID,
+    },
+    {
+        .name = NULL,
+    },
 };
 
 static_assert(sizeof(void*) == sizeof(GoUintptr),
@@ -46,7 +57,8 @@ int go_storage_init(struct thread_data* td) {
     return 0;
   }
 
-  GoUintptr completions = GoStorageInit(td->o.iodepth, endpoint_override);
+  GoUintptr completions = GoStorageInit(td->o.iodepth, endpoint_override,
+                                        (bool)(opts->share_client));
   if (completions == 0) {
     return 1;
   }
@@ -124,18 +136,18 @@ int go_storage_prepopulate_file(struct thread_data* td, struct fio_file* f) {
 }
 
 struct ioengine_ops ioengine = {
-  .name = "go-storage",
-  .version = FIO_IOOPS_VERSION,
-  .flags = FIO_DISKLESSIO | FIO_NOEXTEND | FIO_NODISKUTIL,
-  .setup = go_storage_init,
-  .init = go_storage_init,
-  .cleanup = go_storage_cleanup,
-  .open_file = go_storage_open_file,
-  .close_file = go_storage_close_file,
-  .queue = go_storage_queue,
-  .getevents = go_storage_getevents,
-  .event = go_storage_event,
-  .prepopulate_file = go_storage_prepopulate_file,
-  .option_struct_size = sizeof(struct go_options),
-  .options = options,
+    .name = "go-storage",
+    .version = FIO_IOOPS_VERSION,
+    .flags = FIO_DISKLESSIO | FIO_NOEXTEND | FIO_NODISKUTIL,
+    .setup = go_storage_init,
+    .init = go_storage_init,
+    .cleanup = go_storage_cleanup,
+    .open_file = go_storage_open_file,
+    .close_file = go_storage_close_file,
+    .queue = go_storage_queue,
+    .getevents = go_storage_getevents,
+    .event = go_storage_event,
+    .prepopulate_file = go_storage_prepopulate_file,
+    .option_struct_size = sizeof(struct go_options),
+    .options = options,
 };
