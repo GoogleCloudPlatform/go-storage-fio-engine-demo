@@ -32,7 +32,7 @@ const (
 	fioQQueued = 1
 )
 
-func makeClient(endpoint string) (*storage.Client, error) {
+func makeClient(endpoint string, connectionPoolSize int) (*storage.Client, error) {
 	opts := []option.ClientOption{
 		// Client metrics are super verbose on startup, so turn them off.
 		storage.WithDisabledClientMetrics(),
@@ -40,6 +40,9 @@ func makeClient(endpoint string) (*storage.Client, error) {
 	}
 	if endpoint != "" {
 		opts = append(opts, option.WithEndpoint(endpoint))
+	}
+	if connectionPoolSize > 1 {
+		opts = append(opts, option.WithGRPCConnectionPool(connectionPoolSize))
 	}
 	c, err := storage.NewGRPCClient(context.Background(), opts...)
 	if err != nil {
@@ -49,21 +52,27 @@ func makeClient(endpoint string) (*storage.Client, error) {
 	return c, nil
 }
 
-var sharedClientsMu sync.Mutex
-var sharedClients = make(map[string]*storage.Client)
+type clientKey struct {
+	endpoint           string
+	connectionPoolSize int
+}
 
-func sharedClient(endpoint string) (*storage.Client, error) {
+var sharedClientsMu sync.Mutex
+var sharedClients = make(map[clientKey]*storage.Client)
+
+func sharedClient(endpoint string, connectionPoolSize int) (*storage.Client, error) {
+	key := clientKey{endpoint, connectionPoolSize}
 	sharedClientsMu.Lock()
 	defer sharedClientsMu.Unlock()
-	if c, ok := sharedClients[endpoint]; ok {
+	if c, ok := sharedClients[key]; ok {
 		return c, nil
 	}
 
-	c, err := makeClient(endpoint)
+	c, err := makeClient(endpoint, connectionPoolSize)
 	if err != nil {
 		return nil, err
 	}
-	sharedClients[endpoint] = c
+	sharedClients[key] = c
 	return c, nil
 }
 
@@ -136,15 +145,15 @@ func filenameObjectHandle(td uintptr, filename string) (*threadData, *storage.Ob
 }
 
 //export GoStorageInit
-func GoStorageInit(iodepth uint, endpoint_override *C.char, share_client bool) uintptr {
+func GoStorageInit(iodepth uint, endpoint_override *C.char, connection_pool_size int, share_client bool) uintptr {
 	endpoint := C.GoString(endpoint_override)
-	slog.Info("go storage init", "iodepth", iodepth, "endpoint_override", endpoint, "share_client", share_client)
+	slog.Info("go storage init", "iodepth", iodepth, "endpoint_override", endpoint, "connection_pool_size", connection_pool_size, "share_client", share_client)
 
 	c, err := func() (*storage.Client, error) {
 		if share_client {
-			return sharedClient(endpoint)
+			return sharedClient(endpoint, connection_pool_size)
 		}
-		return makeClient(endpoint)
+		return makeClient(endpoint, connection_pool_size)
 	}()
 	if err != nil {
 		slog.Error("failed client creation", "err", err)
