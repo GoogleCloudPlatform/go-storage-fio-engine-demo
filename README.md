@@ -14,6 +14,8 @@ storage class.
 > It performs synchronous sequential writes and does not include prefetching or
 > read-ahead optimizations.
 
+[![OpenSSF Scorecard](https://api.scorecard.dev/projects/github.com/GoogleCloudPlatform/go-storage-fio-engine-demo/badge)](https://scorecard.dev/viewer/?uri=github.com/GoogleCloudPlatform/go-storage-fio-engine-demo)
+
 ## Quickstart
 
 Install [go](https://go.dev/), then
