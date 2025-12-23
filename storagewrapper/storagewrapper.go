@@ -7,6 +7,7 @@
 package main
 
 import "C"
+
 import (
 	"bytes"
 	"context"
@@ -26,9 +27,9 @@ import (
 )
 
 const (
-	// Must stay in sync with FIO_Q_COMPLETED
+	// Must stay in sync with FIO_Q_COMPLETED.
 	fioQCompleted = 0
-	// Must stay in sync with FIO_Q_QUEUED
+	// Must stay in sync with FIO_Q_QUEUED.
 	fioQQueued = 1
 )
 
@@ -57,8 +58,10 @@ type clientKey struct {
 	connectionPoolSize int
 }
 
-var sharedClientsMu sync.Mutex
-var sharedClients = make(map[clientKey]*storage.Client)
+var (
+	sharedClientsMu sync.Mutex
+	sharedClients   = make(map[clientKey]*storage.Client)
+)
 
 func sharedClient(endpoint string, connectionPoolSize int) (*storage.Client, error) {
 	key := clientKey{endpoint, connectionPoolSize}
