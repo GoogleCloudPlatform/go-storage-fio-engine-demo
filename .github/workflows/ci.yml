@@ -1,7 +1,7 @@
 # Copyright 2025 Google LLC
 # SPDX-License-Identifier: Apache-2.0
 
-name: 'Build and test'
+name: 'Build'
 
 on:
   push:
@@ -10,7 +10,7 @@ on:
     branches: ['main']
 
 jobs:
-  build-and-test:
+  build:
     runs-on: 'ubuntu-latest'
 
     steps:
@@ -27,6 +27,4 @@ jobs:
 
       - name: 'Build'
         run: 'bazel build //...'
-
-      - name: 'Test'
-        run: 'bazel test //...'
+      # N.B. no test targets exist, so bazel test would exit with error
