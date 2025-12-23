@@ -194,7 +194,7 @@ func GoStorageCleanup(td uintptr) {
 }
 
 //export GoStorageAwaitCompletions
-func GoStorageAwaitCompletions(td uintptr, cmin C.uint, cmax C.uint) int {
+func GoStorageAwaitCompletions(td uintptr, cmin, cmax C.uint) int {
 	minCmps := int(cmin)
 	maxCmps := int(cmax)
 	slog.Debug("mrd await completions",
