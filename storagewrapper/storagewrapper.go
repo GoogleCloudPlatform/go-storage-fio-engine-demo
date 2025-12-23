@@ -47,7 +47,7 @@ func makeClient(endpoint string, connectionPoolSize int) (*storage.Client, error
 	}
 	c, err := storage.NewGRPCClient(context.Background(), opts...)
 	if err != nil {
-		return nil, err
+		return nil, fmt.Errorf("creating gRPC client: %w", err)
 	}
 	c.SetRetry(storage.WithErrorFunc(shouldRetry))
 	return c, nil
@@ -86,7 +86,10 @@ func init() {
 
 func shouldRetry(err error) bool {
 	result := storage.ShouldRetry(err)
-	slog.Debug("ShouldRetry?", "err", err, "result", result)
+	slog.Debug("ShouldRetry?",
+		"err", err,
+		"result", result,
+	)
 	return result
 }
 
@@ -150,7 +153,12 @@ func filenameObjectHandle(td uintptr, filename string) (*threadData, *storage.Ob
 //export GoStorageInit
 func GoStorageInit(iodepth uint, endpoint_override *C.char, connection_pool_size int, share_client bool) uintptr {
 	endpoint := C.GoString(endpoint_override)
-	slog.Info("go storage init", "iodepth", iodepth, "endpoint_override", endpoint, "connection_pool_size", connection_pool_size, "share_client", share_client)
+	slog.Info("go storage init",
+		"iodepth", iodepth,
+		"endpoint_override", endpoint,
+		"connection_pool_size", connection_pool_size,
+		"share_client", share_client,
+	)
 
 	c, err := func() (*storage.Client, error) {
 		if share_client {
@@ -187,24 +195,28 @@ func GoStorageCleanup(td uintptr) {
 
 //export GoStorageAwaitCompletions
 func GoStorageAwaitCompletions(td uintptr, cmin C.uint, cmax C.uint) int {
-	min := int(cmin)
-	max := int(cmax)
-	slog.Debug("mrd await completions", "td", td, "min", min, "max", max)
+	minCmps := int(cmin)
+	maxCmps := int(cmax)
+	slog.Debug("mrd await completions",
+		"td", td,
+		"min", minCmps,
+		"max", maxCmps,
+	)
 	t, _, ok := handle[*threadData](td)
 	if !ok {
 		slog.Error("await completions: wrong type handle", "td", td)
 		return -1
 	}
 
-	for len(t.reapedCompletions) < min {
-		slog.Debug("remaining min completions", "count", min-len(t.reapedCompletions))
+	for len(t.reapedCompletions) < minCmps {
+		slog.Debug("remaining min completions", "count", minCmps-len(t.reapedCompletions))
 		t.reapedCompletions = append(t.reapedCompletions, <-t.completions)
 	}
 	slog.Debug("reaped completions", "count", len(t.reapedCompletions))
 
 	func() {
-		for len(t.reapedCompletions) < max {
-			slog.Debug("remaining max completions", "count", max-len(t.reapedCompletions))
+		for len(t.reapedCompletions) < maxCmps {
+			slog.Debug("remaining max completions", "count", maxCmps-len(t.reapedCompletions))
 			select {
 			case v := <-t.completions:
 				t.reapedCompletions = append(t.reapedCompletions, v)
@@ -242,7 +254,11 @@ func GoStorageGetEvent(td uintptr) (iou unsafe.Pointer, ok bool) {
 //export GoStorageOpenReadonly
 func GoStorageOpenReadonly(td uintptr, oDirect bool, filenameCstr *C.char) uintptr {
 	filename := C.GoString(filenameCstr)
-	slog.Debug("go storage open readonly", "td", td, "oDirect", oDirect, "filename", filename)
+	slog.Debug("go storage open readonly",
+		"td", td,
+		"oDirect", oDirect,
+		"filename", filename,
+	)
 	t, oh, err := filenameObjectHandle(td, filename)
 	if err != nil {
 		slog.Error("open: error getting *storage.ObjectHandle", "err", err)
@@ -255,7 +271,10 @@ func GoStorageOpenReadonly(td uintptr, oDirect bool, filenameCstr *C.char) uintp
 
 	mrd, err := oh.NewMultiRangeDownloader(context.Background())
 	if err != nil {
-		slog.Error("failed MRD open", "filename", filename, "err", err)
+		slog.Error("failed MRD open",
+			"filename", filename,
+			"err", err,
+		)
 		return 0
 	}
 	return uintptr(cgo.NewHandle(&mrdFile{t.completions, mrd}))
@@ -264,7 +283,10 @@ func GoStorageOpenReadonly(td uintptr, oDirect bool, filenameCstr *C.char) uintp
 //export GoStorageOpenWriteonly
 func GoStorageOpenWriteonly(td uintptr, flushAfterEveryWrite bool, filenameCstr *C.char) uintptr {
 	filename := C.GoString(filenameCstr)
-	slog.Debug("go storage open writeonly", "td", td, "filename", filename)
+	slog.Debug("go storage open writeonly",
+		"td", td,
+		"filename", filename,
+	)
 	_, oh, err := filenameObjectHandle(td, filename)
 	if err != nil {
 		slog.Error("open: error getting *storage.ObjectHandle", "err", err)
@@ -303,7 +325,10 @@ func GoStorageQueue(v uintptr, iou unsafe.Pointer, offset int64, b unsafe.Pointe
 }
 
 func (m *mrdFile) Close() error {
-	return m.mrd.Close()
+	if err := m.mrd.Close(); err != nil {
+		return fmt.Errorf("closing mrdFile: %w", err)
+	}
+	return nil
 }
 
 func (m *mrdFile) enqueue(p []byte, offset int64, tag unsafe.Pointer) int {
@@ -341,7 +366,10 @@ func (o *oDirectMrdFile) enqueue(p []byte, offset int64, tag unsafe.Pointer) int
 }
 
 func (w *writerFile) Close() error {
-	return w.w.Close()
+	if err := w.w.Close(); err != nil {
+		return fmt.Errorf("closing writerFile: %w", err)
+	}
+	return nil
 }
 
 func (w *writerFile) enqueue(p []byte, offset int64, tag unsafe.Pointer) int {
@@ -365,7 +393,7 @@ func getObjectSize(oh *storage.ObjectHandle) (int64, error) {
 		return 0, nil
 	}
 	if err != nil {
-		return 0, err
+		return 0, fmt.Errorf("getObjectSize: %w", err)
 	}
 	return attrs.Size, nil
 }
@@ -373,7 +401,10 @@ func getObjectSize(oh *storage.ObjectHandle) (int64, error) {
 //export GoStoragePrepopulateFile
 func GoStoragePrepopulateFile(td uintptr, filenameCstr *C.char, fileSize int64) bool {
 	filename := C.GoString(filenameCstr)
-	slog.Debug("go storage prepopulate", "filename", filename, "size", fileSize)
+	slog.Debug("go storage prepopulate",
+		"filename", filename,
+		"size", fileSize,
+	)
 	_, oh, err := filenameObjectHandle(td, filename)
 	if err != nil {
 		slog.Error("prepopulate: error getting *storage.ObjectHandle", "err", err)
@@ -382,7 +413,10 @@ func GoStoragePrepopulateFile(td uintptr, filenameCstr *C.char, fileSize int64) 
 
 	size, err := getObjectSize(oh)
 	if err != nil {
-		slog.Error("prepopulate: failed to get object size", "filename", filename, "err", err)
+		slog.Error("prepopulate: failed to get object size",
+			"filename", filename,
+			"err", err,
+		)
 		return false
 	}
 	if size >= fileSize {
@@ -394,15 +428,24 @@ func GoStoragePrepopulateFile(td uintptr, filenameCstr *C.char, fileSize int64) 
 	w := oh.Retryer(storage.WithPolicy(storage.RetryAlways)).NewWriter(context.Background())
 	w.Append = true
 	if _, err := io.CopyN(w, rand.Reader, fileSize); err != nil {
-		slog.Error("failed to copy random bytes to writer", "filename", filename, "err", err)
+		slog.Error("failed to copy random bytes to writer",
+			"filename", filename,
+			"err", err,
+		)
 		if err := w.Close(); err != nil {
-			slog.Error("(expected) failed to close after write failure", "filename", filename, "err", err)
+			slog.Error("(expected) failed to close after write failure",
+				"filename", filename,
+				"err", err,
+			)
 		}
 		return false
 	}
 
 	if err := w.Close(); err != nil {
-		slog.Error("failed to close after writing random bytes", "filename", filename, "err", err)
+		slog.Error("failed to close after writing random bytes",
+			"filename", filename,
+			"err", err,
+		)
 		return false
 	}
 
