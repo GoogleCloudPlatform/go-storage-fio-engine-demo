@@ -18,6 +18,9 @@ on:
   pull_request:
   merge_group:
 
+permissions:
+  contents: 'read'
+
 concurrency:
   group: '${{ github.workflow }}-${{ github.head_ref || github.ref }}'
   cancel-in-progress: true
@@ -34,8 +37,6 @@ jobs:
       - 'init'
     if: |
       needs.init.outputs.lint_targets != '[]' && github.repository != 'abcxyz/actions'
-    permissions:
-      contents: 'read'
     strategy:
       fail-fast: false
       max-parallel: 100
