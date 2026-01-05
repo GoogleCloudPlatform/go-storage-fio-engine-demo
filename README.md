@@ -39,7 +39,7 @@ Finally, run a test. Set `BUCKET` to the name of a Rapid Storage zonal bucket,
 Execute the following from the root dir of this repo:
 
 ```bash
-bazel-bin/external/_main~_repo_rules~fio_repo/fio_build/bin/fio \
+bazel-bin/external/+_repo_rules+fio_repo/fio_build/bin/fio \
   --name=go_storage_fio \
   --rw=randread \
   --ioengine=external:bazel-bin/libgo-storage-fio-engine.so \
@@ -68,7 +68,7 @@ object of size `OBJECTSIZE` for one minute.
 Measure 50 concurrent 8K ops on a single object stream for one minute:
 
 ```bash
-bazel-bin/external/_main~_repo_rules~fio_repo/fio_build/bin/fio \
+bazel-bin/external/+_repo_rules+fio_repo/fio_build/bin/fio \
   --name=go_storage_fio \
   --rw=randread \
   --ioengine=external:bazel-bin/libgo-storage-fio-engine.so \
@@ -92,7 +92,7 @@ bazel-bin/external/_main~_repo_rules~fio_repo/fio_build/bin/fio \
 Measure one outstanding 8K op on 50 separate object streams for one minute:
 
 ```bash
-bazel-bin/external/_main~_repo_rules~fio_repo/fio_build/bin/fio \
+bazel-bin/external/+_repo_rules+fio_repo/fio_build/bin/fio \
   --name=go_storage_fio \
   --rw=randread \
   --ioengine=external:bazel-bin/libgo-storage-fio-engine.so \
@@ -117,7 +117,7 @@ Measure one outstanding 8K op on 50 separate object streams _to the same object_
 for one minute:
 
 ```bash
-bazel-bin/external/_main~_repo_rules~fio_repo/fio_build/bin/fio \
+bazel-bin/external/+_repo_rules+fio_repo/fio_build/bin/fio \
   --name=go_storage_fio \
   --rw=randread \
   --ioengine=external:bazel-bin/libgo-storage-fio-engine.so \
@@ -141,7 +141,7 @@ bazel-bin/external/_main~_repo_rules~fio_repo/fio_build/bin/fio \
 Measure one client writing one `OBJECTSIZE` object with 16MiB writes.
 
 ```bash
-bazel-bin/external/_main~_repo_rules~fio_repo/fio_build/bin/fio \
+bazel-bin/external/+_repo_rules+fio_repo/fio_build/bin/fio \
   --name=go_storage_fio \
   --rw=write \
   --ioengine=external:bazel-bin/libgo-storage-fio-engine.so \
@@ -161,7 +161,7 @@ bazel-bin/external/_main~_repo_rules~fio_repo/fio_build/bin/fio \
 Measure 50 clients each writing one `OBJECTSIZE` object concurrently:
 
 ```bash
-bazel-bin/external/_main~_repo_rules~fio_repo/fio_build/bin/fio \
+bazel-bin/external/+_repo_rules+fio_repo/fio_build/bin/fio \
   --name=go_storage_fio \
   --rw=write \
   --ioengine=external:bazel-bin/libgo-storage-fio-engine.so \
@@ -181,7 +181,7 @@ bazel-bin/external/_main~_repo_rules~fio_repo/fio_build/bin/fio \
 Measure one client writing 50 `OBJECTSIZE` objects concurrently:
 
 ```bash
-bazel-bin/external/_main~_repo_rules~fio_repo/fio_build/bin/fio \
+bazel-bin/external/+_repo_rules+fio_repo/fio_build/bin/fio \
   --name=go_storage_fio \
   --rw=write \
   --ioengine=external:bazel-bin/libgo-storage-fio-engine.so \
@@ -202,7 +202,7 @@ bazel-bin/external/_main~_repo_rules~fio_repo/fio_build/bin/fio \
 Measure 16 outstanding 10M ops on 10 separate object streams for one minute:
 
 ```bash
-bazel-bin/external/_main~_repo_rules~fio_repo/fio_build/bin/fio \
+bazel-bin/external/+_repo_rules+fio_repo/fio_build/bin/fio \
   --name=go_storage_fio \
   --rw=randread \
   --ioengine=external:bazel-bin/libgo-storage-fio-engine.so \
