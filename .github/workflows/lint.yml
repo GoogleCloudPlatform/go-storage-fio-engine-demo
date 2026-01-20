@@ -29,7 +29,7 @@ jobs:
   init:
     if: |
       github.repository != 'abcxyz/actions'
-    uses: 'abcxyz/actions/.github/workflows/lint-init.yml@dc53ac6837416a5942da3d494b9ea6c0997b7c59'
+    uses: 'abcxyz/actions/.github/workflows/lint-init.yml@32c38de4137cb2a552bf0c5aafe72d2cd06c62ad'
 
   lint:
     runs-on: 'ubuntu-latest'
@@ -44,7 +44,7 @@ jobs:
         lint_target: '${{ fromJSON(needs.init.outputs.lint_targets) }}'
     steps:
       - name: '[${{ matrix.lint_target }}] Lint'
-        uses: 'abcxyz/actions/.github/actions/lint-all@dc53ac6837416a5942da3d494b9ea6c0997b7c59'
+        uses: 'abcxyz/actions/.github/actions/lint-all@32c38de4137cb2a552bf0c5aafe72d2cd06c62ad'
         with:
           lint_target: '${{ matrix.lint_target }}'
           golangci_url: 'https://raw.githubusercontent.com/GoogleCloudPlatform/go-storage-fio-engine-demo/main/.github/golangci.yml'
