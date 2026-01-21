@@ -1,4 +1,7 @@
 #!/bin/bash
+# Copyright 2026 Google LLC
+# SPDX-License-Identifier: Apache-2.0
+
 
 [[ $# -eq 2 ]] || exit 1
 
