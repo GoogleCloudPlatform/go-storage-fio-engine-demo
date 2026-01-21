@@ -30,9 +30,6 @@ jobs:
 
       - name: 'Build'
         run: 'bazel build //...'
-      # N.B. no test targets exist, so bazel test would exit with error
 
-      - name: 'Run help'
-        # Check that fio and the shared object built enough that we suspect the
-        # README commands will run.
-        run: 'bazel-bin/external/+_repo_rules+fio_repo/fio_build/bin/fio --ioengine=external:bazel-bin/libgo-storage-fio-engine.so --enghelp=bazel-bin/libgo-storage-fio-engine.so'
+      - name: 'Test'
+        run: 'bazel test //...'

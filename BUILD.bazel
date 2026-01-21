@@ -19,3 +19,16 @@ cc_shared_library(
     shared_lib_name = "libgo-storage-fio-engine.so",
     deps = [":ioengine"],
 )
+
+sh_test(
+    name = "help_test",
+    srcs = ["help_test.sh"],
+    args = [
+        "$(location @fio_repo//:fio)",
+        "$(location :ioengine_shared)",
+    ],
+    data = [
+        ":ioengine_shared",
+        "@fio_repo//:fio",
+    ],
+)
