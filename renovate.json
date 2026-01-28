@@ -5,5 +5,12 @@
   ],
   "postUpdateOptions": [
     "gomodTidy"
+  ],
+  "packageRules": [
+    {
+      "matchPackageNames": ["bazel"],
+      "matchUpdateTypes": ["major"],
+      "enabled": false
+    }
   ]
 }
