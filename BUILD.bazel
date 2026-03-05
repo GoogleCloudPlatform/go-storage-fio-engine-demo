@@ -20,12 +20,23 @@ cc_shared_library(
     deps = [":ioengine"],
 )
 
+sh_binary(
+    name = "fio",
+    srcs = ["run_fio.sh"],
+    args = ["$(location @fio_repo//:fio)"],
+    data = [
+      ":ioengine_shared",
+      "@fio_repo//:fio",
+    ],
+)
+
 sh_test(
     name = "help_test",
-    srcs = ["help_test.sh"],
+    srcs = ["run_fio.sh"],
     args = [
         "$(location @fio_repo//:fio)",
-        "$(location :ioengine_shared)",
+        "--ioengine=external:$(location :ioengine_shared)",
+        "--enghelp=$(location :ioengine_shared)",
     ],
     data = [
         ":ioengine_shared",
