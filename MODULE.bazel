@@ -2,15 +2,12 @@ bazel_dep(name = "gazelle", version = "0.47.0")
 bazel_dep(name = "rules_cc", version = "0.2.17")
 bazel_dep(name = "rules_foreign_cc", version = "0.15.1")
 bazel_dep(name = "rules_go", version = "0.60.0")
-bazel_dep(name = "toolchains_llvm", version = "1.6.0")
 
-# Use llvm to compile - local gcc version may fail to build rules_foreign_cc.
-llvm = use_extension("@toolchains_llvm//toolchain/extensions:llvm.bzl", "llvm")
-llvm.toolchain(
-   llvm_version = "19.1.7",
-)
-use_repo(llvm, "llvm_toolchain")
-register_toolchains("@llvm_toolchain//:all")
+# Use local make toolchain instead of building it from scratch.
+register_toolchains("@rules_foreign_cc//toolchains:preinstalled_make_toolchain")
+# We don't use pkgconfig, so use the local one instead of building it from
+# scratch.
+register_toolchains("@rules_foreign_cc//toolchains:preinstalled_pkgconfig_toolchain")
 
 # Fetch fio such that we can use its headers.
 http_archive = use_repo_rule("@bazel_tools//tools/build_defs/repo:http.bzl", "http_archive")

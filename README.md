@@ -18,8 +18,10 @@ storage class.
 
 ## Quickstart
 
-Install [go](https://go.dev/), then
-[bazelisk](https://github.com/bazelbuild/bazelisk):
+Install `make` and a C/C++ compiler, e.g. via the `build-essential` package, and
+[go](https://go.dev/).
+
+Then, install [bazelisk](https://github.com/bazelbuild/bazelisk):
 
 ```bash
 go install github.com/bazelbuild/bazelisk@latest
