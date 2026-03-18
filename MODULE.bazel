@@ -17,9 +17,9 @@ http_archive(
     build_file = "//:BUILD.fio.bazel",
     patch_args = ["-p1"],
     patches = ["//:fio.install-headers.patch"],
-    sha256 = "73b3ca18a66fb88a90dae73b9994fdd18d35161d914ffe2089380760af5533cf",
-    strip_prefix = "fio-fio-3.38",
-    url = "https://github.com/axboe/fio/archive/refs/tags/fio-3.38.tar.gz",
+    sha256 = "38f2c723eda1d94fd25c91dbad30da7a551a58840b7a6368eaee3daa700fb088",
+    strip_prefix = "fio-fio-3.41",
+    url = "https://github.com/axboe/fio/archive/refs/tags/fio-3.41.tar.gz",
 )
 
 # Use the Go version indicated in go.mod

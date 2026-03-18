@@ -1,16 +1,14 @@
-diff --git a/Makefile b/Makefile
-index 746a27d4..6ab07a1e 100644
---- a/Makefile
-+++ b/Makefile
-@@ -483,6 +483,7 @@ else
+--- a/Makefile	2025-09-05 20:21:17.000000000 +0000
++++ b/Makefile	2026-03-18 13:53:27.802197521 +0000
+@@ -485,6 +485,7 @@
  endif
  prefix = $(INSTALL_PREFIX)
  bindir = $(prefix)/bin
 +incdir = $(prefix)/include
  libdir = $(prefix)/lib/fio
- 
- ifeq ($(CONFIG_TARGET_OS), Darwin)
-@@ -695,5 +696,15 @@ endif
+ mandir = $(prefix)/share/man
+ sharedir = $(prefix)/share/fio
+@@ -691,5 +692,15 @@
  	$(INSTALL) -m 644 $(SRCDIR)/tools/hist/fiologparser_hist.py.1 $(DESTDIR)$(mandir)/man1
  	$(INSTALL) -m 755 -d $(DESTDIR)$(sharedir)
  	$(INSTALL) -m 644 $(SRCDIR)/tools/plot/*gpm $(DESTDIR)$(sharedir)/
