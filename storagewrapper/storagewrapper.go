@@ -315,13 +315,13 @@ type byteSliceWriter struct {
 	buf []byte
 }
 
-func (w *byteSliceWriter) Write(p []byte) (n int, err error) {
-	n = copy(w.buf, p)
+func (w *byteSliceWriter) Write(p []byte) (int, error) {
+	n := copy(w.buf, p)
 	w.buf = w.buf[n:]
 	if n < len(p) {
-		err = io.EOF
+		return n, io.EOF
 	}
-	return
+	return n, nil
 }
 
 //export GoStorageQueue
