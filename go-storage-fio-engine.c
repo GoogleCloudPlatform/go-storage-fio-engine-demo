@@ -16,6 +16,7 @@ struct go_options {
   char* endpoint;
   unsigned int connection_pool_size;
   unsigned int share_client;
+  unsigned int insecure_credentials;
 };
 
 static struct fio_option options[] = {
@@ -50,6 +51,16 @@ static struct fio_option options[] = {
         .group = FIO_OPT_G_INVALID,
     },
     {
+        .name = "go-storage-insecure-credentials",
+        .lname = "go-storage-insecure-credentials",
+        .type = FIO_OPT_BOOL,
+        .off1 = offsetof(struct go_options, insecure_credentials),
+        .def = "0",
+        .help = "If true, use insecure credentials (WithoutAuthentication)",
+        .category = FIO_OPT_C_ENGINE,
+        .group = FIO_OPT_G_INVALID,
+    },
+    {
         .name = NULL,
     },
 };
@@ -70,7 +81,8 @@ int go_storage_init(struct thread_data* td) {
 
   GoUintptr completions = GoStorageInit(td->o.iodepth, endpoint_override,
                                         (int)(opts->connection_pool_size),
-                                        (bool)(opts->share_client));
+                                        (bool)(opts->share_client),
+                                        (bool)(opts->insecure_credentials));
   if (completions == 0) {
     return 1;
   }

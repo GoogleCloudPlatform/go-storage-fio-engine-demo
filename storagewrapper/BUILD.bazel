@@ -20,5 +20,7 @@ go_library(
         "@com_google_cloud_go_storage//:storage",
         "@com_google_cloud_go_storage//experimental",
         "@org_golang_google_api//option",
+        "@org_golang_google_grpc//:grpc",
+        "@org_golang_google_grpc//credentials/insecure",
     ],
 )

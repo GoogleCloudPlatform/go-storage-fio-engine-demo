@@ -23,6 +23,8 @@ import (
 	"cloud.google.com/go/storage"
 	"cloud.google.com/go/storage/experimental"
 	"google.golang.org/api/option"
+	"google.golang.org/grpc"
+	"google.golang.org/grpc/credentials/insecure"
 )
 
 const (
@@ -32,7 +34,7 @@ const (
 	fioQQueued = 1
 )
 
-func makeClient(endpoint string, connectionPoolSize int) (*storage.Client, error) {
+func makeClient(endpoint string, connectionPoolSize int, insecureCredentials bool) (*storage.Client, error) {
 	opts := []option.ClientOption{
 		// Client metrics are super verbose on startup, so turn them off.
 		storage.WithDisabledClientMetrics(),
@@ -40,6 +42,12 @@ func makeClient(endpoint string, connectionPoolSize int) (*storage.Client, error
 	}
 	if endpoint != "" {
 		opts = append(opts, option.WithEndpoint(endpoint))
+	}
+	if insecureCredentials {
+		opts = append(opts,
+			option.WithoutAuthentication(),
+			option.WithGRPCDialOption(grpc.WithTransportCredentials(insecure.NewCredentials())),
+		)
 	}
 	if connectionPoolSize > 1 {
 		opts = append(opts, option.WithGRPCConnectionPool(connectionPoolSize))
@@ -53,8 +61,9 @@ func makeClient(endpoint string, connectionPoolSize int) (*storage.Client, error
 }
 
 type clientKey struct {
-	endpoint           string
-	connectionPoolSize int
+	endpoint            string
+	connectionPoolSize  int
+	insecureCredentials bool
 }
 
 var (
@@ -62,15 +71,15 @@ var (
 	sharedClients   = make(map[clientKey]*storage.Client)
 )
 
-func sharedClient(endpoint string, connectionPoolSize int) (*storage.Client, error) {
-	key := clientKey{endpoint, connectionPoolSize}
+func sharedClient(endpoint string, connectionPoolSize int, insecureCredentials bool) (*storage.Client, error) {
+	key := clientKey{endpoint, connectionPoolSize, insecureCredentials}
 	sharedClientsMu.Lock()
 	defer sharedClientsMu.Unlock()
 	if c, ok := sharedClients[key]; ok {
 		return c, nil
 	}
 
-	c, err := makeClient(endpoint, connectionPoolSize)
+	c, err := makeClient(endpoint, connectionPoolSize, insecureCredentials)
 	if err != nil {
 		return nil, err
 	}
@@ -150,20 +159,21 @@ func filenameObjectHandle(td uintptr, filename string) (*threadData, *storage.Ob
 }
 
 //export GoStorageInit
-func GoStorageInit(iodepth uint, endpoint_override *C.char, connection_pool_size int, share_client bool) uintptr {
+func GoStorageInit(iodepth uint, endpoint_override *C.char, connection_pool_size int, share_client, insecure_credentials bool) uintptr {
 	endpoint := C.GoString(endpoint_override)
 	slog.Info("go storage init",
 		"iodepth", iodepth,
 		"endpoint_override", endpoint,
 		"connection_pool_size", connection_pool_size,
 		"share_client", share_client,
+		"insecure_credentials", insecure_credentials,
 	)
 
 	c, err := func() (*storage.Client, error) {
 		if share_client {
-			return sharedClient(endpoint, connection_pool_size)
+			return sharedClient(endpoint, connection_pool_size, insecure_credentials)
 		}
-		return makeClient(endpoint, connection_pool_size)
+		return makeClient(endpoint, connection_pool_size, insecure_credentials)
 	}()
 	if err != nil {
 		slog.Error("failed client creation", "err", err)
