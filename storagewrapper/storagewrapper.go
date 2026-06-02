@@ -9,7 +9,6 @@ package main
 import "C"
 
 import (
-	"bytes"
 	"context"
 	"crypto/rand"
 	"errors"
@@ -312,6 +311,19 @@ func GoStorageClose(v uintptr) bool {
 	return true
 }
 
+type byteSliceWriter struct {
+	buf []byte
+}
+
+func (w *byteSliceWriter) Write(p []byte) (n int, err error) {
+	n = copy(w.buf, p)
+	w.buf = w.buf[n:]
+	if n < len(p) {
+		err = io.EOF
+	}
+	return
+}
+
 //export GoStorageQueue
 func GoStorageQueue(v uintptr, iou unsafe.Pointer, offset int64, b unsafe.Pointer, bl C.int) int {
 	slog.Debug("go storage queue", "handle", v)
@@ -321,7 +333,8 @@ func GoStorageQueue(v uintptr, iou unsafe.Pointer, offset int64, b unsafe.Pointe
 		return -1
 	}
 
-	return f.enqueue(C.GoBytes(b, bl), offset, iou)
+	p := unsafe.Slice((*byte)(b), int(bl))
+	return f.enqueue(p, offset, iou)
 }
 
 func (m *mrdFile) Close() error {
@@ -332,7 +345,7 @@ func (m *mrdFile) Close() error {
 }
 
 func (m *mrdFile) enqueue(p []byte, offset int64, tag unsafe.Pointer) int {
-	buf := bytes.NewBuffer(p)
+	buf := &byteSliceWriter{buf: p}
 	m.mrd.Add(buf, offset, int64(len(p)), func(offset, length int64, err error) {
 		m.completions <- iouCompletion{tag, err}
 	})
@@ -351,7 +364,7 @@ func (o *oDirectMrdFile) enqueue(p []byte, offset int64, tag unsafe.Pointer) int
 			o.completions <- iouCompletion{tag, err}
 			return
 		}
-		buf := bytes.NewBuffer(p)
+		buf := &byteSliceWriter{buf: p}
 		errs := make(chan error)
 		mrd.Add(buf, offset, int64(len(p)), func(offset, length int64, err error) {
 			errs <- err
