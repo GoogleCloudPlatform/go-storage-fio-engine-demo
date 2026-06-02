@@ -1,8 +1,9 @@
 load("@gazelle//:def.bzl", "gazelle")
-load("@rules_go//go:def.bzl", "go_binary", "go_library")
+load("@rules_go//go:def.bzl", "go_binary", "go_library", "go_test")
 
 gazelle(name = "gazelle")
 
+# keep
 go_binary(
     name = "storagewrapper",
     embed = [":storagewrapper_lib"],
@@ -23,4 +24,30 @@ go_library(
         "@org_golang_google_grpc//:grpc",
         "@org_golang_google_grpc//credentials/insecure",
     ],
+)
+
+go_test(
+    name = "storagewrapper_test",
+    srcs = ["storagewrapper_test.go"],
+    embed = [":storagewrapper_lib"],
+    deps = ["@com_google_cloud_go_storage//:storage"],
+)
+
+sh_test(
+    name = "integration_test",
+    srcs = ["run_integration_test.sh"],
+    args = [
+        "$(location :storagewrapper_test)",
+        "$(location //:testbench_helper.sh)",
+        "$(location @storage_testbench//:setup.py)",
+        "$(location @storage_testbench//:testbench_run.py)",
+    ],
+    data = [
+        ":storagewrapper_test",
+        "//:testbench_helper.sh",
+        "@storage_testbench//:all_files",
+        "@storage_testbench//:setup.py",
+        "@storage_testbench//:testbench_run.py",
+    ],
+    tags = ["local"],
 )

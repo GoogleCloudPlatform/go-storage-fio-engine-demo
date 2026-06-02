@@ -18,8 +18,8 @@ storage class.
 
 ## Quickstart
 
-Install `make` and a C/C++ compiler, e.g. via the `build-essential` package, and
-[go](https://go.dev/).
+Install `python3`, `make` and a C/C++ compiler, e.g. via the `build-essential`
+package, and [go](https://go.dev/).
 
 Then, install [bazelisk](https://github.com/bazelbuild/bazelisk):
 
@@ -264,3 +264,13 @@ not supported.
 Prepopulation cannot be cancelled with SIGINT/Ctrl-C.
 
 `fio` may hang if an error occurs at read high iodepth.
+
+## Development
+
+This repo contains a small integration test suite using the GCS
+[storage\_testbench](https://github.com/googleapis/storage-testbench). Run it
+with:
+
+```bash
+"$(go env GOPATH)/bin/bazelisk" test //...
+```

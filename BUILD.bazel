@@ -1,6 +1,8 @@
 load("@rules_cc//cc:cc_binary.bzl", "cc_binary")
 load("@rules_cc//cc:cc_shared_library.bzl", "cc_shared_library")
 
+exports_files(["testbench_helper.sh"])
+
 cc_library(
     name = "ioengine",
     srcs = [
@@ -42,4 +44,27 @@ sh_test(
         ":ioengine_shared",
         "@fio_repo//:fio",
     ],
+)
+
+sh_test(
+    name = "fio_integration_test",
+    srcs = ["run_fio_integration_tests.sh"],
+    args = [
+        "$(location @fio_repo//:fio)",
+        "$(location :ioengine_shared)",
+        "$(location :testbench_helper.sh)",
+        "$(location :fio_validator.py)",
+        "$(location @storage_testbench//:setup.py)",
+        "$(location @storage_testbench//:testbench_run.py)",
+    ],
+    data = [
+        "@fio_repo//:fio",
+        ":ioengine_shared",
+        ":testbench_helper.sh",
+        ":fio_validator.py",
+        "@storage_testbench//:all_files",
+        "@storage_testbench//:setup.py",
+        "@storage_testbench//:testbench_run.py",
+    ],
+    tags = ["local"],
 )
