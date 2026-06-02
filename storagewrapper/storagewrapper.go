@@ -44,7 +44,8 @@ func makeClient(endpoint string, connectionPoolSize int, insecureCredentials boo
 		opts = append(opts, option.WithEndpoint(endpoint))
 	}
 	if insecureCredentials {
-		opts = append(opts,
+		opts = append(
+			opts,
 			option.WithoutAuthentication(),
 			option.WithGRPCDialOption(grpc.WithTransportCredentials(insecure.NewCredentials())),
 		)
@@ -94,7 +95,8 @@ func init() {
 
 func shouldRetry(err error) bool {
 	result := storage.ShouldRetry(err)
-	slog.Debug("ShouldRetry?",
+	slog.Debug(
+		"ShouldRetry?",
 		"err", err,
 		"result", result,
 	)
@@ -144,46 +146,48 @@ func handle[T any](v uintptr) (T, cgo.Handle, bool) {
 	return t, h, true
 }
 
-func filenameObjectHandle(td uintptr, filename string) (*threadData, *storage.ObjectHandle, error) {
+func filenameObjectHandle(t *threadData, filename string) (*storage.ObjectHandle, error) {
 	bucket, object, ok := strings.Cut(filename, "/")
 	if !ok {
-		return nil, nil, fmt.Errorf("could not extract bucket from filename %v", filename)
+		return nil, fmt.Errorf("could not extract bucket from filename %v", filename)
 	}
-
-	t, _, ok := handle[*threadData](td)
-	if !ok {
-		return nil, nil, fmt.Errorf("handle %d not of type *threadData", td)
-	}
-
-	return t, t.client.Bucket(bucket).Object(object), nil
+	return t.client.Bucket(bucket).Object(object), nil
 }
 
-//export GoStorageInit
-func GoStorageInit(iodepth uint, endpoint_override *C.char, connection_pool_size int, share_client, insecure_credentials bool) uintptr {
-	endpoint := C.GoString(endpoint_override)
-	slog.Info("go storage init",
-		"iodepth", iodepth,
-		"endpoint_override", endpoint,
-		"connection_pool_size", connection_pool_size,
-		"share_client", share_client,
-		"insecure_credentials", insecure_credentials,
-	)
-
+func goStorageInit(iodepth uint, endpoint string, connectionPoolSize int, shareClient, insecureCredentials bool) (*threadData, error) {
 	c, err := func() (*storage.Client, error) {
-		if share_client {
-			return sharedClient(endpoint, connection_pool_size, insecure_credentials)
+		if shareClient {
+			return sharedClient(endpoint, connectionPoolSize, insecureCredentials)
 		}
-		return makeClient(endpoint, connection_pool_size, insecure_credentials)
+		return makeClient(endpoint, connectionPoolSize, insecureCredentials)
 	}()
 	if err != nil {
-		slog.Error("failed client creation", "err", err)
-		return 0
+		return nil, err
 	}
 
 	td := &threadData{
 		completions:       make(chan iouCompletion, iodepth),
 		reapedCompletions: make([]iouCompletion, 0, iodepth),
 		client:            c,
+	}
+	slog.Info(
+		"go storage init",
+		"td", fmt.Sprintf("%p", td),
+		"iodepth", iodepth,
+		"endpoint", endpoint,
+		"connection_pool_size", connectionPoolSize,
+		"share_client", shareClient,
+		"insecure_credentials", insecureCredentials,
+	)
+	return td, nil
+}
+
+//export GoStorageInit
+func GoStorageInit(iodepth uint, endpoint_override *C.char, connection_pool_size int, share_client, insecure_credentials bool) uintptr {
+	td, err := goStorageInit(iodepth, C.GoString(endpoint_override), connection_pool_size, share_client, insecure_credentials)
+	if err != nil {
+		slog.Error("failed client creation", "err", err)
+		return 0
 	}
 	return uintptr(cgo.NewHandle(td))
 }
@@ -202,30 +206,23 @@ func GoStorageCleanup(td uintptr) {
 	h.Delete()
 }
 
-//export GoStorageAwaitCompletions
-func GoStorageAwaitCompletions(td uintptr, cmin, cmax C.uint) int {
-	minCmps := int(cmin)
-	maxCmps := int(cmax)
-	slog.Debug("mrd await completions",
-		"td", td,
-		"min", minCmps,
-		"max", maxCmps,
+func goStorageAwaitCompletions(t *threadData, cmin, cmax int) int {
+	slog.Debug(
+		"mrd await completions",
+		"td", fmt.Sprintf("%p", t),
+		"min", cmin,
+		"max", cmax,
 	)
-	t, _, ok := handle[*threadData](td)
-	if !ok {
-		slog.Error("await completions: wrong type handle", "td", td)
-		return -1
-	}
 
-	for len(t.reapedCompletions) < minCmps {
-		slog.Debug("remaining min completions", "count", minCmps-len(t.reapedCompletions))
+	for len(t.reapedCompletions) < cmin {
+		slog.Debug("remaining min completions", "count", cmin-len(t.reapedCompletions))
 		t.reapedCompletions = append(t.reapedCompletions, <-t.completions)
 	}
 	slog.Debug("reaped completions", "count", len(t.reapedCompletions))
 
 	func() {
-		for len(t.reapedCompletions) < maxCmps {
-			slog.Debug("remaining max completions", "count", maxCmps-len(t.reapedCompletions))
+		for len(t.reapedCompletions) < cmax {
+			slog.Debug("remaining max completions", "count", cmax-len(t.reapedCompletions))
 			select {
 			case v := <-t.completions:
 				t.reapedCompletions = append(t.reapedCompletions, v)
@@ -238,16 +235,20 @@ func GoStorageAwaitCompletions(td uintptr, cmin, cmax C.uint) int {
 	return len(t.reapedCompletions)
 }
 
-//export GoStorageGetEvent
-func GoStorageGetEvent(td uintptr) (iou unsafe.Pointer, ok bool) {
-	slog.Debug("mrd get event", "td", td)
+//export GoStorageAwaitCompletions
+func GoStorageAwaitCompletions(td uintptr, cmin, cmax C.uint) int {
 	t, _, ok := handle[*threadData](td)
 	if !ok {
-		slog.Error("get event: wrong type handle", "td", td)
-		return nil, false
+		slog.Error("await completions: wrong type handle", "td", td)
+		return -1
 	}
+	return goStorageAwaitCompletions(t, int(cmin), int(cmax))
+}
+
+func goStorageGetEvent(t *threadData) (iou unsafe.Pointer, ok bool) {
+	slog.Debug("mrd get event", "td", fmt.Sprintf("%p", t))
 	if len(t.reapedCompletions) == 0 {
-		slog.Error("get event: no reaped completions", "td", td)
+		slog.Error("get event: no reaped completions")
 		return nil, false
 	}
 	v := t.reapedCompletions[len(t.reapedCompletions)-1]
@@ -260,51 +261,83 @@ func GoStorageGetEvent(td uintptr) (iou unsafe.Pointer, ok bool) {
 	return v.iou, ok
 }
 
-//export GoStorageOpenReadonly
-func GoStorageOpenReadonly(td uintptr, oDirect bool, filenameCstr *C.char) uintptr {
-	filename := C.GoString(filenameCstr)
-	slog.Debug("go storage open readonly",
-		"td", td,
+//export GoStorageGetEvent
+func GoStorageGetEvent(td uintptr) (iou unsafe.Pointer, ok bool) {
+	t, _, ok := handle[*threadData](td)
+	if !ok {
+		slog.Error("get event: wrong type handle", "td", td)
+		return nil, false
+	}
+	return goStorageGetEvent(t)
+}
+
+func goStorageOpenReadonly(t *threadData, oDirect bool, filename string) (goFile, error) {
+	slog.Debug(
+		"go storage open readonly",
+		"td", fmt.Sprintf("%p", t),
 		"oDirect", oDirect,
 		"filename", filename,
 	)
-	t, oh, err := filenameObjectHandle(td, filename)
+	oh, err := filenameObjectHandle(t, filename)
 	if err != nil {
-		slog.Error("open: error getting *storage.ObjectHandle", "err", err)
-		return 0
+		return nil, fmt.Errorf("open: error getting *storage.ObjectHandle: %w", err)
 	}
 
 	if oDirect {
-		return uintptr(cgo.NewHandle(&oDirectMrdFile{t.completions, oh}))
+		return &oDirectMrdFile{t.completions, oh}, nil
 	}
 
 	mrd, err := oh.NewMultiRangeDownloader(context.Background())
 	if err != nil {
-		slog.Error("failed MRD open",
-			"filename", filename,
-			"err", err,
-		)
-		return 0
+		return nil, fmt.Errorf("failed MRD open: %w", err)
 	}
-	return uintptr(cgo.NewHandle(&mrdFile{t.completions, mrd}))
+	return &mrdFile{t.completions, mrd}, nil
 }
 
-//export GoStorageOpenWriteonly
-func GoStorageOpenWriteonly(td uintptr, flushAfterEveryWrite bool, filenameCstr *C.char) uintptr {
-	filename := C.GoString(filenameCstr)
-	slog.Debug("go storage open writeonly",
-		"td", td,
+//export GoStorageOpenReadonly
+func GoStorageOpenReadonly(td uintptr, oDirect bool, filenameCstr *C.char) uintptr {
+	t, _, ok := handle[*threadData](td)
+	if !ok {
+		slog.Error("open: wrong type handle", "td", td)
+		return 0
+	}
+	file, err := goStorageOpenReadonly(t, oDirect, C.GoString(filenameCstr))
+	if err != nil {
+		slog.Error("open failed", "err", err)
+		return 0
+	}
+	return uintptr(cgo.NewHandle(file))
+}
+
+func goStorageOpenWriteonly(t *threadData, flushAfterEveryWrite bool, filename string) (goFile, error) {
+	slog.Debug(
+		"go storage open writeonly",
+		"td", fmt.Sprintf("%p", t),
 		"filename", filename,
 	)
-	_, oh, err := filenameObjectHandle(td, filename)
+	oh, err := filenameObjectHandle(t, filename)
 	if err != nil {
-		slog.Error("open: error getting *storage.ObjectHandle", "err", err)
-		return 0
+		return nil, fmt.Errorf("open: error getting *storage.ObjectHandle: %w", err)
 	}
 
 	w := oh.Retryer(storage.WithPolicy(storage.RetryAlways)).NewWriter(context.Background())
 	w.Append = true
-	return uintptr(cgo.NewHandle(&writerFile{w, flushAfterEveryWrite}))
+	return &writerFile{w, flushAfterEveryWrite}, nil
+}
+
+//export GoStorageOpenWriteonly
+func GoStorageOpenWriteonly(td uintptr, flushAfterEveryWrite bool, filenameCstr *C.char) uintptr {
+	t, _, ok := handle[*threadData](td)
+	if !ok {
+		slog.Error("open writeonly: wrong type handle", "td", td)
+		return 0
+	}
+	file, err := goStorageOpenWriteonly(t, flushAfterEveryWrite, C.GoString(filenameCstr))
+	if err != nil {
+		slog.Error("open writeonly failed", "err", err)
+		return 0
+	}
+	return uintptr(cgo.NewHandle(file))
 }
 
 //export GoStorageClose
@@ -342,7 +375,6 @@ func GoStorageQueue(v uintptr, iou unsafe.Pointer, offset int64, b unsafe.Pointe
 		slog.Error("queue: wrong type handle", "v", v)
 		return -1
 	}
-
 	p := unsafe.Slice((*byte)(b), int(bl))
 	return f.enqueue(p, offset, iou)
 }
@@ -421,14 +453,14 @@ func getObjectSize(oh *storage.ObjectHandle) (int64, error) {
 	return attrs.Size, nil
 }
 
-//export GoStoragePrepopulateFile
-func GoStoragePrepopulateFile(td uintptr, filenameCstr *C.char, fileSize int64) bool {
-	filename := C.GoString(filenameCstr)
-	slog.Debug("go storage prepopulate",
+func goStoragePrepopulateFile(t *threadData, filename string, fileSize int64) bool {
+	slog.Debug(
+		"go storage prepopulate",
+		"td", fmt.Sprintf("%p", t),
 		"filename", filename,
 		"size", fileSize,
 	)
-	_, oh, err := filenameObjectHandle(td, filename)
+	oh, err := filenameObjectHandle(t, filename)
 	if err != nil {
 		slog.Error("prepopulate: error getting *storage.ObjectHandle", "err", err)
 		return false
@@ -436,7 +468,8 @@ func GoStoragePrepopulateFile(td uintptr, filenameCstr *C.char, fileSize int64) 
 
 	size, err := getObjectSize(oh)
 	if err != nil {
-		slog.Error("prepopulate: failed to get object size",
+		slog.Error(
+			"prepopulate: failed to get object size",
 			"filename", filename,
 			"err", err,
 		)
@@ -451,12 +484,14 @@ func GoStoragePrepopulateFile(td uintptr, filenameCstr *C.char, fileSize int64) 
 	w := oh.Retryer(storage.WithPolicy(storage.RetryAlways)).NewWriter(context.Background())
 	w.Append = true
 	if _, err := io.CopyN(w, rand.Reader, fileSize); err != nil {
-		slog.Error("failed to copy random bytes to writer",
+		slog.Error(
+			"failed to copy random bytes to writer",
 			"filename", filename,
 			"err", err,
 		)
 		if err := w.Close(); err != nil {
-			slog.Error("(expected) failed to close after write failure",
+			slog.Error(
+				"(expected) failed to close after write failure",
 				"filename", filename,
 				"err", err,
 			)
@@ -465,7 +500,8 @@ func GoStoragePrepopulateFile(td uintptr, filenameCstr *C.char, fileSize int64) 
 	}
 
 	if err := w.Close(); err != nil {
-		slog.Error("failed to close after writing random bytes",
+		slog.Error(
+			"failed to close after writing random bytes",
 			"filename", filename,
 			"err", err,
 		)
@@ -473,6 +509,16 @@ func GoStoragePrepopulateFile(td uintptr, filenameCstr *C.char, fileSize int64) 
 	}
 
 	return true
+}
+
+//export GoStoragePrepopulateFile
+func GoStoragePrepopulateFile(td uintptr, filenameCstr *C.char, fileSize int64) bool {
+	t, _, ok := handle[*threadData](td)
+	if !ok {
+		slog.Error("prepopulate: wrong type handle", "td", td)
+		return false
+	}
+	return goStoragePrepopulateFile(t, C.GoString(filenameCstr), fileSize)
 }
 
 func main() {}
