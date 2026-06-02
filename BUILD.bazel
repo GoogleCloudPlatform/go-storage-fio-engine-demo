@@ -25,8 +25,8 @@ sh_binary(
     srcs = ["run_fio.sh"],
     args = ["$(location @fio_repo//:fio)"],
     data = [
-      ":ioengine_shared",
-      "@fio_repo//:fio",
+        ":ioengine_shared",
+        "@fio_repo//:fio",
     ],
 )
 
