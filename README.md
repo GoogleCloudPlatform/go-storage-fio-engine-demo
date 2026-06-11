@@ -268,7 +268,7 @@ Prepopulation cannot be cancelled with SIGINT/Ctrl-C.
 ## Development
 
 This repo contains a small integration test suite using the GCS
-[storage\_testbench](https://github.com/googleapis/storage-testbench). Run it
+[storage-testbench](https://github.com/googleapis/storage-testbench). Run it
 with:
 
 ```bash
