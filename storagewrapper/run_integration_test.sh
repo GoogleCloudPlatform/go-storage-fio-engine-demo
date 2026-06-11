@@ -13,13 +13,13 @@ if [[ $# -lt 4 ]]; then
   exit 1
 fi
 
-TEST_BINARY=$1
-TESTBENCH_HELPER_SH=$2
-TESTBENCH_SETUP_PY=$3
-TESTBENCH_RUN_PY=$4
+TEST_BINARY="$1"
+TESTBENCH_HELPER_SH="$2"
+TESTBENCH_SETUP_PY="$3"
+TESTBENCH_RUN_PY="$4"
 
-# Source the shared helper
-source "${TESTBENCH_HELPER_SH}"
+# shellcheck disable=SC1090
+source "${TESTBENCH_HELPER_SH?}"
 
 # Callback function called by the testbench helper
 execute_go_test() {

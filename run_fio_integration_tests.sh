@@ -13,16 +13,15 @@ if [[ $# -lt 6 ]]; then
   exit 1
 fi
 
-FIO_BINARY=$1
-IOENGINE_SO=$2
-TESTBENCH_HELPER_SH=$3
-FIO_VALIDATOR_PY=$4
-TESTBENCH_SETUP_PY=$5
-TESTBENCH_RUN_PY=$6
+FIO_BINARY="$1"
+IOENGINE_SO="$2"
+TESTBENCH_HELPER_SH="$3"
+FIO_VALIDATOR_PY="$4"
+TESTBENCH_SETUP_PY="$5"
+TESTBENCH_RUN_PY="$6"
 
-# Source the shared helper
-source "${TESTBENCH_HELPER_SH}"
-
+# shellcheck disable=SC1090
+source "${TESTBENCH_HELPER_SH?}"
 
 # Helper function to run FIO and validate output
 run_fio_test() {
@@ -38,10 +37,10 @@ run_fio_test() {
     -d "{\"name\": \"${test_name}\"}" > /dev/null
 
   "${FIO_BINARY?}" --name="${test_name?}" "${FIO_COMMON[@]}" "$@" \
-    >"${TEST_TMPDIR}/fio_out.json"
+    >"${TEST_TMPDIR?}/fio_out.json"
   
   # Validate output
-  python3 "${FIO_VALIDATOR_PY}" --json-file "${TEST_TMPDIR}/fio_out.json"
+  python3 "${FIO_VALIDATOR_PY}" --json-file "${TEST_TMPDIR?}/fio_out.json"
 
   echo "Test ${test_name} PASSED and cleaned up."
 }

@@ -17,6 +17,8 @@ import (
 )
 
 func TestWriteThenRead(t *testing.T) {
+	t.Parallel()
+
 	grpcEndpoint := os.Getenv("STORAGE_EMULATOR_GRPC_ENDPOINT")
 	if grpcEndpoint == "" {
 		t.Skip("STORAGE_EMULATOR_GRPC_ENDPOINT not set, skipping integration test")
