@@ -88,11 +88,6 @@ func sharedClient(endpoint string, connectionPoolSize int, insecureCredentials b
 	return c, nil
 }
 
-func init() {
-	// TODO: Consider doing this in the engine, via options.
-	slog.SetLogLoggerLevel(slog.LevelError)
-}
-
 func shouldRetry(err error) bool {
 	result := storage.ShouldRetry(err)
 	slog.Debug(
@@ -183,7 +178,12 @@ func goStorageInit(iodepth uint, endpoint string, connectionPoolSize int, shareC
 }
 
 //export GoStorageInit
-func GoStorageInit(iodepth uint, endpoint_override *C.char, connection_pool_size int, share_client, insecure_credentials bool) uintptr {
+func GoStorageInit(iodepth uint, endpoint_override *C.char, connection_pool_size int, share_client, insecure_credentials, verbose_logging bool) uintptr {
+	if verbose_logging {
+		slog.SetLogLoggerLevel(slog.LevelDebug)
+	} else {
+		slog.SetLogLoggerLevel(slog.LevelError)
+	}
 	td, err := goStorageInit(iodepth, C.GoString(endpoint_override), connection_pool_size, share_client, insecure_credentials)
 	if err != nil {
 		slog.Error("failed client creation", "err", err)

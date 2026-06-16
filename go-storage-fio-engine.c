@@ -17,6 +17,7 @@ struct go_options {
   unsigned int connection_pool_size;
   unsigned int share_client;
   unsigned int insecure_credentials;
+  unsigned int verbose_logging;
 };
 
 static struct fio_option options[] = {
@@ -61,6 +62,16 @@ static struct fio_option options[] = {
         .group = FIO_OPT_G_INVALID,
     },
     {
+        .name = "go-storage-verbose-logging",
+        .lname = "go-storage-verbose-logging",
+        .type = FIO_OPT_BOOL,
+        .off1 = offsetof(struct go_options, verbose_logging),
+        .def = "0",
+        .help = "If true, display all log lines (debug/info). Default is errors only (0).",
+        .category = FIO_OPT_C_ENGINE,
+        .group = FIO_OPT_G_INVALID,
+    },
+    {
         .name = NULL,
     },
 };
@@ -69,10 +80,21 @@ static_assert(sizeof(void*) == sizeof(GoUintptr),
               "can't use GoUintptr directly as void*");
 
 int go_storage_init(struct thread_data* td) {
-  struct go_options* opts = td->eo;
   char* endpoint_override = "";
-  if (opts != NULL && opts->endpoint != NULL) {
-    endpoint_override = opts->endpoint;
+  bool insecure_creds = false;
+  bool verbose_logging = false;
+  int pool_size = 1;
+  bool share_client = false;
+
+  struct go_options* opts = td->eo;
+  if (opts != NULL) {
+    if (opts->endpoint != NULL) {
+      endpoint_override = opts->endpoint;
+    }
+    insecure_creds = opts->insecure_credentials != 0;
+    verbose_logging = opts->verbose_logging != 0;
+    pool_size = (int)opts->connection_pool_size;
+    share_client = opts->share_client != 0;
   }
 
   if (td->io_ops_data != NULL) {
@@ -80,9 +102,10 @@ int go_storage_init(struct thread_data* td) {
   }
 
   GoUintptr completions = GoStorageInit(td->o.iodepth, endpoint_override,
-                                        (int)(opts->connection_pool_size),
-                                        (bool)(opts->share_client),
-                                        (bool)(opts->insecure_credentials));
+                                        pool_size,
+                                        share_client,
+                                        insecure_creds,
+                                        verbose_logging);
   if (completions == 0) {
     return 1;
   }
