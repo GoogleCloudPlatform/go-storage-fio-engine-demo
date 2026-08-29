@@ -11,7 +11,6 @@ import (
 	"fmt"
 	"os"
 	"testing"
-	"unsafe"
 
 	"cloud.google.com/go/storage"
 )
@@ -54,7 +53,7 @@ func TestWriteThenRead(t *testing.T) {
 				if err != nil {
 					t.Fatalf("goStorageOpenWriteonly failed: %v", err)
 				}
-				if q := wf.enqueue(expectedContent, 0, unsafe.Pointer(uintptr(0))); q != fioQCompleted {
+				if q := wf.enqueue(expectedContent, 0, uintptr(0)); q != fioQCompleted {
 					t.Fatalf("write enqueue did not succeed immediately: %v", q)
 				}
 				if err := wf.Close(); err != nil {
@@ -68,7 +67,7 @@ func TestWriteThenRead(t *testing.T) {
 				defer rf.Close()
 
 				buf := make([]byte, len(expectedContent))
-				tag := unsafe.Pointer(uintptr(42))
+				tag := uintptr(42)
 				if q := rf.enqueue(buf, 0, tag); q != 1 {
 					t.Fatalf("read enqueue did not queue: %v", q)
 				}
