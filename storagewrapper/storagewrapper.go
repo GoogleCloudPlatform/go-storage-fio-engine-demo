@@ -109,6 +109,7 @@ type threadData struct {
 	client            *storage.Client
 	appendWrites      bool
 	finalizeOnClose   bool
+	rangeReader       bool
 }
 
 type mrdFile struct {
@@ -117,6 +118,11 @@ type mrdFile struct {
 }
 
 type oDirectMrdFile struct {
+	completions chan<- iouCompletion
+	oh          *storage.ObjectHandle
+}
+
+type rangeReaderFile struct {
 	completions chan<- iouCompletion
 	oh          *storage.ObjectHandle
 }
@@ -151,7 +157,7 @@ func filenameObjectHandle(t *threadData, filename string) (*storage.ObjectHandle
 	return t.client.Bucket(bucket).Object(object), nil
 }
 
-func goStorageInit(iodepth uint, endpoint string, connectionPoolSize int, shareClient, appendWrites, finalizeOnClose, insecureCredentials bool) (*threadData, error) {
+func goStorageInit(iodepth uint, endpoint string, connectionPoolSize int, shareClient, appendWrites, finalizeOnClose, rangeReader, insecureCredentials bool) (*threadData, error) {
 	c, err := func() (*storage.Client, error) {
 		if shareClient {
 			return sharedClient(endpoint, connectionPoolSize, insecureCredentials)
@@ -168,6 +174,7 @@ func goStorageInit(iodepth uint, endpoint string, connectionPoolSize int, shareC
 		client:            c,
 		appendWrites:      appendWrites,
 		finalizeOnClose:   finalizeOnClose,
+		rangeReader:       rangeReader,
 	}
 	slog.Info(
 		"go storage init",
@@ -178,19 +185,20 @@ func goStorageInit(iodepth uint, endpoint string, connectionPoolSize int, shareC
 		"share_client", shareClient,
 		"append_writes", appendWrites,
 		"finalize_on_close", finalizeOnClose,
+		"range_reader", rangeReader,
 		"insecure_credentials", insecureCredentials,
 	)
 	return td, nil
 }
 
 //export GoStorageInit
-func GoStorageInit(iodepth uint, endpoint_override *C.char, connection_pool_size int, share_client, append_writes, finalize_on_close, insecure_credentials, verbose_logging bool) uintptr {
+func GoStorageInit(iodepth uint, endpoint_override *C.char, connection_pool_size int, share_client, append_writes, finalize_on_close, range_reader, insecure_credentials, verbose_logging bool) uintptr {
 	if verbose_logging {
 		slog.SetLogLoggerLevel(slog.LevelDebug)
 	} else {
 		slog.SetLogLoggerLevel(slog.LevelError)
 	}
-	td, err := goStorageInit(iodepth, C.GoString(endpoint_override), connection_pool_size, share_client, append_writes, finalize_on_close, insecure_credentials)
+	td, err := goStorageInit(iodepth, C.GoString(endpoint_override), connection_pool_size, share_client, append_writes, finalize_on_close, range_reader, insecure_credentials)
 	if err != nil {
 		slog.Error("failed client creation", "err", err)
 		return 0
@@ -290,6 +298,10 @@ func goStorageOpenReadonly(t *threadData, oDirect bool, filename string) (goFile
 		return nil, fmt.Errorf("open: error getting *storage.ObjectHandle: %w", err)
 	}
 
+	if t.rangeReader {
+		return &rangeReaderFile{t.completions, oh}, nil
+	}
+
 	if oDirect {
 		return &oDirectMrdFile{t.completions, oh}, nil
 	}
@@ -375,6 +387,27 @@ func (w *byteSliceWriter) Write(p []byte) (int, error) {
 	return n, nil
 }
 
+func (w *byteSliceWriter) ReadFrom(r io.Reader) (n int64, err error) {
+	origSz := len(w.buf)
+	var tmpN int
+	for err == nil && len(w.buf) > 0 {
+		tmpN, err = r.Read(w.buf)
+		n += int64(tmpN)
+		w.buf = w.buf[tmpN:]
+	}
+	if err == nil {
+		oneMore := make([]byte, 1)
+		tmpN, err = r.Read(oneMore)
+		if tmpN > 0 || err == nil {
+			return n, fmt.Errorf("unexpectedly more than %v to read", origSz)
+		}
+	}
+	if err == io.EOF {
+		err = nil
+	}
+	return n, err
+}
+
 //export GoStorageQueue
 func GoStorageQueue(v uintptr, iou unsafe.Pointer, offset int64, b unsafe.Pointer, bl C.int) int {
 	slog.Debug("go storage queue", "handle", v)
@@ -424,6 +457,28 @@ func (o *oDirectMrdFile) enqueue(p []byte, offset int64, tag uintptr) int {
 			addErr = fmt.Errorf("read error: %w; close error: %w", addErr, err)
 		}
 		o.completions <- iouCompletion{tag, addErr}
+	}()
+	return fioQQueued
+}
+
+func (r *rangeReaderFile) Close() error {
+	return nil
+}
+
+func (r *rangeReaderFile) enqueue(p []byte, offset int64, tag uintptr) int {
+	go func() {
+		or, err := r.oh.NewRangeReader(context.Background(), offset, int64(len(p)))
+		if err != nil {
+			slog.Error("failed Reader open for enqueue", "err", err)
+			r.completions <- iouCompletion{tag, err}
+			return
+		}
+		buf := &byteSliceWriter{buf: p}
+		_, err = io.Copy(buf, or)
+		if closeErr := or.Close(); closeErr != nil {
+			err = fmt.Errorf("read error: %w; close error: %w", err, closeErr)
+		}
+		r.completions <- iouCompletion{tag, err}
 	}()
 	return fioQQueued
 }

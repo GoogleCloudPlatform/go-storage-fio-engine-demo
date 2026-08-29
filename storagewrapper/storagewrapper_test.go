@@ -30,65 +30,80 @@ func TestWriteThenRead(t *testing.T) {
 	}
 	defer client.Close()
 
-	bucketName := "integration-read-test-bucket"
-	objectName := "integration-read-test-object"
 	expectedContent := []byte("Verification content for storagewrapper read integration!")
 
-	bucket := client.Bucket(bucketName)
-	if err := bucket.Create(ctx, "test-project", nil); err != nil {
-		t.Fatalf("failed to create bucket: %v", err)
+	type testFields struct {
+		appendWrites    bool
+		finalizeOnClose bool
+		rangeReader     bool
 	}
 
-	for _, appendWrites := range []bool{true, false} {
-		for _, finalizeOnClose := range []bool{true, false} {
-			t.Run(fmt.Sprintf("appendWrites: %v, finalizeOnClose: %v", appendWrites, finalizeOnClose), func(t *testing.T) {
-				t.Parallel()
-				td, err := goStorageInit(2, grpcEndpoint, 1, false, appendWrites, finalizeOnClose, true)
-				if err != nil {
-					t.Fatalf("goStorageInit failed: %v", err)
-				}
+	bucketCt := 0
+	testFn := func(t *testing.T, fs testFields) {
+		t.Helper()
+		bucketName := fmt.Sprintf("integration-read-test-bucket-%d", bucketCt)
+		bucketCt++
+		objectName := "integration-read-test-object"
 
-				filename := fmt.Sprintf("%s/%s", bucketName, objectName)
-				wf, err := goStorageOpenWriteonly(td, false, filename)
-				if err != nil {
-					t.Fatalf("goStorageOpenWriteonly failed: %v", err)
-				}
-				if q := wf.enqueue(expectedContent, 0, uintptr(0)); q != fioQCompleted {
-					t.Fatalf("write enqueue did not succeed immediately: %v", q)
-				}
-				if err := wf.Close(); err != nil {
-					t.Fatalf("write close failed: %v", err)
-				}
+		bucket := client.Bucket(bucketName)
+		if err := bucket.Create(ctx, "test-project", nil); err != nil {
+			t.Fatalf("failed to create bucket: %v", err)
+		}
+		td, err := goStorageInit(2, grpcEndpoint, 1, false, fs.appendWrites, fs.finalizeOnClose, fs.rangeReader, true)
+		if err != nil {
+			t.Fatalf("goStorageInit failed: %v", err)
+		}
 
-				rf, err := goStorageOpenReadonly(td, false, filename)
-				if err != nil {
-					t.Fatalf("goStorageOpenReadonly failed: %v", err)
-				}
-				defer rf.Close()
+		filename := fmt.Sprintf("%s/%s", bucketName, objectName)
+		wf, err := goStorageOpenWriteonly(td, false, filename)
+		if err != nil {
+			t.Fatalf("goStorageOpenWriteonly failed: %v", err)
+		}
+		if q := wf.enqueue(expectedContent, 0, uintptr(0)); q != fioQCompleted {
+			t.Fatalf("write enqueue did not succeed immediately: %v", q)
+		}
+		if err := wf.Close(); err != nil {
+			t.Fatalf("write close failed: %v", err)
+		}
 
-				buf := make([]byte, len(expectedContent))
-				tag := uintptr(42)
-				if q := rf.enqueue(buf, 0, tag); q != 1 {
-					t.Fatalf("read enqueue did not queue: %v", q)
-				}
+		rf, err := goStorageOpenReadonly(td, false, filename)
+		if err != nil {
+			t.Fatalf("goStorageOpenReadonly failed: %v", err)
+		}
+		defer rf.Close()
 
-				reaped := goStorageAwaitCompletions(td, 1, 1)
-				if reaped != 1 {
-					t.Fatalf("goStorageAwaitCompletions failed, expected 1, got %d", reaped)
-				}
+		buf := make([]byte, len(expectedContent))
+		tag := uintptr(42)
+		if q := rf.enqueue(buf, 0, tag); q != 1 {
+			t.Fatalf("read enqueue did not queue: %v", q)
+		}
 
-				reapedTag, ok := goStorageGetEvent(td)
-				if !ok {
-					t.Fatalf("goStorageGetEvent reported error")
-				}
-				if reapedTag != tag {
-					t.Fatalf("goStorageGetEvent returned wrong tag, expected %v, got %v", tag, reapedTag)
-				}
+		reaped := goStorageAwaitCompletions(td, 1, 1)
+		if reaped != 1 {
+			t.Fatalf("goStorageAwaitCompletions failed, expected 1, got %d", reaped)
+		}
 
-				if string(buf) != string(expectedContent) {
-					t.Fatalf("Content mismatch! expected %q, got %q", expectedContent, buf)
-				}
-			})
+		reapedTag, ok := goStorageGetEvent(td)
+		if !ok {
+			t.Fatalf("goStorageGetEvent reported error")
+		}
+		if reapedTag != tag {
+			t.Fatalf("goStorageGetEvent returned wrong tag, expected %v, got %v", tag, reapedTag)
+		}
+
+		if string(buf) != string(expectedContent) {
+			t.Fatalf("Content mismatch! expected %q, got %q", expectedContent, buf)
+		}
+	}
+	for _, a := range []bool{true, false} {
+		for _, f := range []bool{true, false} {
+			for _, r := range []bool{true, false} {
+				f := testFields{a, f, r}
+				t.Run(fmt.Sprintf("fields: %v", f), func(t *testing.T) {
+					t.Parallel()
+					testFn(t, f)
+				})
+			}
 		}
 	}
 }
