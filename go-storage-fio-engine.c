@@ -20,6 +20,7 @@ struct go_options {
   unsigned int verbose_logging;
   unsigned int append_writes;
   unsigned int finalize_on_close;
+  unsigned int range_reader;
 };
 
 static struct fio_option options[] = {
@@ -94,6 +95,16 @@ static struct fio_option options[] = {
         .group = FIO_OPT_G_INVALID,
     },
     {
+        .name = "go-storage-range-reader",
+        .lname = "go-storage-range-reader",
+        .type = FIO_OPT_BOOL,
+        .off1 = offsetof(struct go_options, range_reader),
+        .def = "0",
+        .help = "If true, use NewRangeReader to issue reads.",
+        .category = FIO_OPT_C_ENGINE,
+        .group = FIO_OPT_G_INVALID,
+    },
+    {
         .name = NULL,
     },
 };
@@ -109,6 +120,7 @@ int go_storage_init(struct thread_data* td) {
   bool share_client = false;
   bool append_writes = true;
   bool finalize_on_close = false;
+  bool range_reader = false;
 
   struct go_options* opts = td->eo;
   if (opts != NULL) {
@@ -121,6 +133,7 @@ int go_storage_init(struct thread_data* td) {
     share_client = opts->share_client != 0;
     append_writes = opts->append_writes != 0;
     finalize_on_close = opts->finalize_on_close != 0;
+    range_reader = opts->range_reader != 0;
   }
 
   if (td->io_ops_data != NULL) {
@@ -132,6 +145,7 @@ int go_storage_init(struct thread_data* td) {
                                         share_client,
                                         append_writes,
                                         finalize_on_close,
+                                        range_reader,
                                         insecure_creds,
                                         verbose_logging);
   if (completions == 0) {
