@@ -40,49 +40,56 @@ func TestWriteThenRead(t *testing.T) {
 		t.Fatalf("failed to create bucket: %v", err)
 	}
 
-	td, err := goStorageInit(2, grpcEndpoint, 1, false, true)
-	if err != nil {
-		t.Fatalf("goStorageInit failed: %v", err)
-	}
+	for _, appendWrites := range []bool{true, false} {
+		for _, finalizeOnClose := range []bool{true, false} {
+			t.Run(fmt.Sprintf("appendWrites: %v, finalizeOnClose: %v", appendWrites, finalizeOnClose), func(t *testing.T) {
+				t.Parallel()
+				td, err := goStorageInit(2, grpcEndpoint, 1, false, appendWrites, finalizeOnClose, true)
+				if err != nil {
+					t.Fatalf("goStorageInit failed: %v", err)
+				}
 
-	filename := fmt.Sprintf("%s/%s", bucketName, objectName)
-	wf, err := goStorageOpenWriteonly(td, false, filename)
-	if err != nil {
-		t.Fatalf("goStorageOpenWriteonly failed: %v", err)
-	}
-	if q := wf.enqueue(expectedContent, 0, unsafe.Pointer(uintptr(0))); q != fioQCompleted {
-		t.Fatalf("write enqueue did not succeed immediately: %v", q)
-	}
-	if err := wf.Close(); err != nil {
-		t.Fatalf("write close failed: %v", err)
-	}
+				filename := fmt.Sprintf("%s/%s", bucketName, objectName)
+				wf, err := goStorageOpenWriteonly(td, false, filename)
+				if err != nil {
+					t.Fatalf("goStorageOpenWriteonly failed: %v", err)
+				}
+				if q := wf.enqueue(expectedContent, 0, unsafe.Pointer(uintptr(0))); q != fioQCompleted {
+					t.Fatalf("write enqueue did not succeed immediately: %v", q)
+				}
+				if err := wf.Close(); err != nil {
+					t.Fatalf("write close failed: %v", err)
+				}
 
-	rf, err := goStorageOpenReadonly(td, false, filename)
-	if err != nil {
-		t.Fatalf("goStorageOpenReadonly failed: %v", err)
-	}
-	defer rf.Close()
+				rf, err := goStorageOpenReadonly(td, false, filename)
+				if err != nil {
+					t.Fatalf("goStorageOpenReadonly failed: %v", err)
+				}
+				defer rf.Close()
 
-	buf := make([]byte, len(expectedContent))
-	tag := unsafe.Pointer(uintptr(42))
-	if q := rf.enqueue(buf, 0, tag); q != 1 {
-		t.Fatalf("read enqueue did not queue: %v", q)
-	}
+				buf := make([]byte, len(expectedContent))
+				tag := unsafe.Pointer(uintptr(42))
+				if q := rf.enqueue(buf, 0, tag); q != 1 {
+					t.Fatalf("read enqueue did not queue: %v", q)
+				}
 
-	reaped := goStorageAwaitCompletions(td, 1, 1)
-	if reaped != 1 {
-		t.Fatalf("goStorageAwaitCompletions failed, expected 1, got %d", reaped)
-	}
+				reaped := goStorageAwaitCompletions(td, 1, 1)
+				if reaped != 1 {
+					t.Fatalf("goStorageAwaitCompletions failed, expected 1, got %d", reaped)
+				}
 
-	reapedTag, ok := goStorageGetEvent(td)
-	if !ok {
-		t.Fatalf("goStorageGetEvent reported error")
-	}
-	if reapedTag != tag {
-		t.Fatalf("goStorageGetEvent returned wrong tag, expected %v, got %v", tag, reapedTag)
-	}
+				reapedTag, ok := goStorageGetEvent(td)
+				if !ok {
+					t.Fatalf("goStorageGetEvent reported error")
+				}
+				if reapedTag != tag {
+					t.Fatalf("goStorageGetEvent returned wrong tag, expected %v, got %v", tag, reapedTag)
+				}
 
-	if string(buf) != string(expectedContent) {
-		t.Fatalf("Content mismatch! expected %q, got %q", expectedContent, buf)
+				if string(buf) != string(expectedContent) {
+					t.Fatalf("Content mismatch! expected %q, got %q", expectedContent, buf)
+				}
+			})
+		}
 	}
 }

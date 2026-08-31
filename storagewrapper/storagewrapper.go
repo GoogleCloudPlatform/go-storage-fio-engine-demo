@@ -107,6 +107,8 @@ type threadData struct {
 	completions       chan iouCompletion
 	reapedCompletions []iouCompletion
 	client            *storage.Client
+	appendWrites      bool
+	finalizeOnClose   bool
 }
 
 type mrdFile struct {
@@ -149,7 +151,7 @@ func filenameObjectHandle(t *threadData, filename string) (*storage.ObjectHandle
 	return t.client.Bucket(bucket).Object(object), nil
 }
 
-func goStorageInit(iodepth uint, endpoint string, connectionPoolSize int, shareClient, insecureCredentials bool) (*threadData, error) {
+func goStorageInit(iodepth uint, endpoint string, connectionPoolSize int, shareClient, appendWrites, finalizeOnClose, insecureCredentials bool) (*threadData, error) {
 	c, err := func() (*storage.Client, error) {
 		if shareClient {
 			return sharedClient(endpoint, connectionPoolSize, insecureCredentials)
@@ -164,6 +166,8 @@ func goStorageInit(iodepth uint, endpoint string, connectionPoolSize int, shareC
 		completions:       make(chan iouCompletion, iodepth),
 		reapedCompletions: make([]iouCompletion, 0, iodepth),
 		client:            c,
+		appendWrites:      appendWrites,
+		finalizeOnClose:   finalizeOnClose,
 	}
 	slog.Info(
 		"go storage init",
@@ -172,19 +176,21 @@ func goStorageInit(iodepth uint, endpoint string, connectionPoolSize int, shareC
 		"endpoint", endpoint,
 		"connection_pool_size", connectionPoolSize,
 		"share_client", shareClient,
+		"append_writes", appendWrites,
+		"finalize_on_close", finalizeOnClose,
 		"insecure_credentials", insecureCredentials,
 	)
 	return td, nil
 }
 
 //export GoStorageInit
-func GoStorageInit(iodepth uint, endpoint_override *C.char, connection_pool_size int, share_client, insecure_credentials, verbose_logging bool) uintptr {
+func GoStorageInit(iodepth uint, endpoint_override *C.char, connection_pool_size int, share_client, append_writes, finalize_on_close, insecure_credentials, verbose_logging bool) uintptr {
 	if verbose_logging {
 		slog.SetLogLoggerLevel(slog.LevelDebug)
 	} else {
 		slog.SetLogLoggerLevel(slog.LevelError)
 	}
-	td, err := goStorageInit(iodepth, C.GoString(endpoint_override), connection_pool_size, share_client, insecure_credentials)
+	td, err := goStorageInit(iodepth, C.GoString(endpoint_override), connection_pool_size, share_client, append_writes, finalize_on_close, insecure_credentials)
 	if err != nil {
 		slog.Error("failed client creation", "err", err)
 		return 0
@@ -321,7 +327,8 @@ func goStorageOpenWriteonly(t *threadData, flushAfterEveryWrite bool, filename s
 	}
 
 	w := oh.Retryer(storage.WithPolicy(storage.RetryAlways)).NewWriter(context.Background())
-	w.Append = true
+	w.Append = t.appendWrites
+	w.FinalizeOnClose = t.finalizeOnClose
 	return &writerFile{w, flushAfterEveryWrite}, nil
 }
 
@@ -482,7 +489,8 @@ func goStoragePrepopulateFile(t *threadData, filename string, fileSize int64) bo
 
 	// Prepopulate with random data. Always retry transient errors.
 	w := oh.Retryer(storage.WithPolicy(storage.RetryAlways)).NewWriter(context.Background())
-	w.Append = true
+	w.Append = t.appendWrites
+	w.FinalizeOnClose = t.finalizeOnClose
 	if _, err := io.CopyN(w, rand.Reader, fileSize); err != nil {
 		slog.Error(
 			"failed to copy random bytes to writer",

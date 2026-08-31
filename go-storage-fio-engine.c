@@ -18,6 +18,8 @@ struct go_options {
   unsigned int share_client;
   unsigned int insecure_credentials;
   unsigned int verbose_logging;
+  unsigned int append_writes;
+  unsigned int finalize_on_close;
 };
 
 static struct fio_option options[] = {
@@ -72,6 +74,26 @@ static struct fio_option options[] = {
         .group = FIO_OPT_G_INVALID,
     },
     {
+        .name = "go-storage-append-writes",
+        .lname = "go-storage-append-writes",
+        .type = FIO_OPT_BOOL,
+        .off1 = offsetof(struct go_options, append_writes),
+        .def = "1",
+        .help = "If true, use appendable objects for writes.",
+        .category = FIO_OPT_C_ENGINE,
+        .group = FIO_OPT_G_INVALID,
+    },
+    {
+        .name = "go-storage-finalize-on-close",
+        .lname = "go-storage-finalize-on-close",
+        .type = FIO_OPT_BOOL,
+        .off1 = offsetof(struct go_options, finalize_on_close),
+        .def = "0",
+        .help = "If true, finalize appendable objects on close.",
+        .category = FIO_OPT_C_ENGINE,
+        .group = FIO_OPT_G_INVALID,
+    },
+    {
         .name = NULL,
     },
 };
@@ -85,6 +107,8 @@ int go_storage_init(struct thread_data* td) {
   bool verbose_logging = false;
   int pool_size = 1;
   bool share_client = false;
+  bool append_writes = true;
+  bool finalize_on_close = false;
 
   struct go_options* opts = td->eo;
   if (opts != NULL) {
@@ -95,6 +119,8 @@ int go_storage_init(struct thread_data* td) {
     verbose_logging = opts->verbose_logging != 0;
     pool_size = (int)opts->connection_pool_size;
     share_client = opts->share_client != 0;
+    append_writes = opts->append_writes != 0;
+    finalize_on_close = opts->finalize_on_close != 0;
   }
 
   if (td->io_ops_data != NULL) {
@@ -104,6 +130,8 @@ int go_storage_init(struct thread_data* td) {
   GoUintptr completions = GoStorageInit(td->o.iodepth, endpoint_override,
                                         pool_size,
                                         share_client,
+                                        append_writes,
+                                        finalize_on_close,
                                         insecure_creds,
                                         verbose_logging);
   if (completions == 0) {
