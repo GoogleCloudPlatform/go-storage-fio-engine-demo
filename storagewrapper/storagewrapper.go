@@ -99,7 +99,7 @@ func shouldRetry(err error) bool {
 }
 
 type iouCompletion struct {
-	iou unsafe.Pointer
+	iou uintptr
 	err error
 }
 
@@ -131,7 +131,7 @@ type goFile interface {
 	// Enqueues an operation appropriate for this file type. Implementations must
 	// return 0 for successfully completed operations, 1 for enqueued operations,
 	// and -1 for failed operations.
-	enqueue(p []byte, offset int64, tag unsafe.Pointer) int
+	enqueue(p []byte, offset int64, tag uintptr) int
 }
 
 func handle[T any](v uintptr) (T, cgo.Handle, bool) {
@@ -251,11 +251,11 @@ func GoStorageAwaitCompletions(td uintptr, cmin, cmax C.uint) int {
 	return goStorageAwaitCompletions(t, int(cmin), int(cmax))
 }
 
-func goStorageGetEvent(t *threadData) (iou unsafe.Pointer, ok bool) {
+func goStorageGetEvent(t *threadData) (iou uintptr, ok bool) {
 	slog.Debug("mrd get event", "td", fmt.Sprintf("%p", t))
 	if len(t.reapedCompletions) == 0 {
 		slog.Error("get event: no reaped completions")
-		return nil, false
+		return 0, false
 	}
 	v := t.reapedCompletions[len(t.reapedCompletions)-1]
 	t.reapedCompletions = t.reapedCompletions[:len(t.reapedCompletions)-1]
@@ -274,7 +274,8 @@ func GoStorageGetEvent(td uintptr) (iou unsafe.Pointer, ok bool) {
 		slog.Error("get event: wrong type handle", "td", td)
 		return nil, false
 	}
-	return goStorageGetEvent(t)
+	tag, ok := goStorageGetEvent(t)
+	return unsafe.Pointer(tag), ok
 }
 
 func goStorageOpenReadonly(t *threadData, oDirect bool, filename string) (goFile, error) {
@@ -383,7 +384,7 @@ func GoStorageQueue(v uintptr, iou unsafe.Pointer, offset int64, b unsafe.Pointe
 		return -1
 	}
 	p := unsafe.Slice((*byte)(b), int(bl))
-	return f.enqueue(p, offset, iou)
+	return f.enqueue(p, offset, uintptr(iou))
 }
 
 func (m *mrdFile) Close() error {
@@ -393,7 +394,7 @@ func (m *mrdFile) Close() error {
 	return nil
 }
 
-func (m *mrdFile) enqueue(p []byte, offset int64, tag unsafe.Pointer) int {
+func (m *mrdFile) enqueue(p []byte, offset int64, tag uintptr) int {
 	buf := &byteSliceWriter{buf: p}
 	m.mrd.Add(buf, offset, int64(len(p)), func(offset, length int64, err error) {
 		m.completions <- iouCompletion{tag, err}
@@ -405,7 +406,7 @@ func (o *oDirectMrdFile) Close() error {
 	return nil
 }
 
-func (o *oDirectMrdFile) enqueue(p []byte, offset int64, tag unsafe.Pointer) int {
+func (o *oDirectMrdFile) enqueue(p []byte, offset int64, tag uintptr) int {
 	go func() {
 		mrd, err := o.oh.NewMultiRangeDownloader(context.Background())
 		if err != nil {
@@ -434,7 +435,7 @@ func (w *writerFile) Close() error {
 	return nil
 }
 
-func (w *writerFile) enqueue(p []byte, offset int64, tag unsafe.Pointer) int {
+func (w *writerFile) enqueue(p []byte, offset int64, tag uintptr) int {
 	if _, err := w.w.Write(p); err != nil {
 		slog.Error("write error", "err", err)
 		return -1
