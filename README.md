@@ -10,9 +10,12 @@ take advantage of the capabilites and performance offered by the Rapid
 storage class.
 
 > [!NOTE]
-> This ioengine is exclusively for buckets using the Rapid storage class.
-> It performs synchronous sequential writes and does not include prefetching or
-> read-ahead optimizations.
+> This ioengine's default configuration demonstrates the behavior for of buckets
+> using the Rapid storage class. To support Standard storage class, pass
+> `--go-storage-append-writes=0` and `--go-storage-range-reader=1`.
+>
+> The ioengine always performs synchronous sequential writes, and does not
+> perform prefetching or read-ahead optimizations.
 
 [![OpenSSF Scorecard](https://api.scorecard.dev/projects/github.com/GoogleCloudPlatform/go-storage-fio-engine-demo/badge)](https://scorecard.dev/viewer/?uri=github.com/GoogleCloudPlatform/go-storage-fio-engine-demo)
 
@@ -227,6 +230,11 @@ Measure 16 outstanding 10M ops on 10 separate object streams for one minute:
 
 For more details on arguments, see the `fio` documentation.
 
+## Additional flags
+
+Run `"$(go env GOPATH)/bin/bazelisk" run //:help_test` to see engine-specific
+configuration flags.
+
 ## Buffered and direct IO behavior
 
 The behavior of the engine differs based on whether direct IO is enabled (e.g.,
@@ -248,6 +256,11 @@ by using `--direct=1`).
 *   **Reads:** A new read stream is established for every read operation. The
     reported latency measures setting up the stream, performing the read, and
     closing the stream.
+
+### Range readers
+
+With `--go-storage-range-reader=1`, `--direct` has no effect on reads. Each read
+operation starts a new range reader.
 
 ## Known issues
 
