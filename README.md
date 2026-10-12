@@ -251,8 +251,9 @@ by using `--direct=1`).
 
 ### With direct IO (`--direct=1`):
 
-*   **Writes:** Write operations are flushed immediately. The reported latency
-    measures both the write and the flush.
+*   **Writes:** Appendable write operations are flushed immediately. The
+    reported latency measures both the write and the flush. Non-appendable
+    writes ignore this flag.
 *   **Reads:** A new read stream is established for every read operation. The
     reported latency measures setting up the stream, performing the read, and
     closing the stream.

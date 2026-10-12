@@ -342,7 +342,7 @@ func goStorageOpenWriteonly(t *threadData, flushAfterEveryWrite bool, filename s
 	w := oh.Retryer(storage.WithPolicy(storage.RetryAlways)).NewWriter(context.Background())
 	w.Append = t.appendWrites
 	w.FinalizeOnClose = t.finalizeOnClose
-	return &writerFile{w, flushAfterEveryWrite}, nil
+	return &writerFile{w, t.appendWrites && flushAfterEveryWrite}, nil
 }
 
 //export GoStorageOpenWriteonly

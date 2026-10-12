@@ -180,7 +180,9 @@ execute_one_test() {
   echo "# $*"
   echo "###"
   local HTTP_PORT=$1
-  local GRPC_PORT=$2
+  shift
+  local GRPC_PORT=$1
+  shift
   local FIO_COMMON=(
     "--ioengine=external:${IOENGINE_SO}"
     "--thread"
@@ -189,6 +191,7 @@ execute_one_test() {
     "--create_serialize=0"
     "--output-format=json"
   )
+  FIO_COMMON+=("$@")
 
   run_fio_test single_stream_reads_buffered
   run_fio_test single_stream_reads_direct
