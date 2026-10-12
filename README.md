@@ -10,7 +10,7 @@ take advantage of the capabilites and performance offered by the Rapid
 storage class.
 
 > [!NOTE]
-> This ioengine's default configuration demonstrates the behavior for of buckets
+> This ioengine's default configuration demonstrates the behavior of buckets
 > using the Rapid storage class. To support Standard storage class, pass
 > `--go-storage-append-writes=0` and `--go-storage-range-reader=1`.
 >
